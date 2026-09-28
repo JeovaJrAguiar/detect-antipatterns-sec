@@ -1,5 +1,3 @@
-from observa.database.models import SourceModel, DetectorModel, HistoryModel
-from observa.database.database import Base, engine
 from observa.sources.json_source import JsonSource
 from observa.framework.manager import global_manager as manager
 from observa.framework.base import Source, Detector
@@ -24,10 +22,6 @@ class Orchestrator:
         DETECTOR_LOCAL_NAME = os.getenv("DETECTOR_LOCAL_NAME", "")
         DETECTOR_LOCAL_PATH = os.getenv("DETECTOR_LOCAL_PATH", "")
 
-        #Base.metadata.drop_all(bind=engine)
-        Base.metadata.create_all(bind=engine)
-        print("Database loaded ...")
-            
         _names_source = [item.strip() for item in SOURCES_LOCAL_NAME.split(',') if item.strip()]
         _paths_source = [item.strip() for item in SOURCES_LOCAL_PATH.split(',') if item.strip()]
         _namesObject_source = [item.strip() for item in SOURCES_LOCAL_OBJECT_NAME.split(',') if item.strip()]

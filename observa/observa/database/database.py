@@ -1,5 +1,6 @@
 # observa/database.py
 from sqlalchemy import create_engine
+from sqlalchemy.engine import URL
 from sqlalchemy.orm import sessionmaker, declarative_base
 from dotenv import load_dotenv
 import os
@@ -7,18 +8,24 @@ import os
 # Carrega variáveis do arquivo .env (se existir)
 load_dotenv()
 
-# Lê as variáveis de ambiente do Postgres
-POSTGRES_USER = os.getenv("POSTGRES_USER", "postgres")
-POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD", "postgres")
-POSTGRES_HOST = os.getenv("POSTGRES_HOST", "localhost")
-POSTGRES_PORT = os.getenv("POSTGRES_PORT", "5432")
-POSTGRES_DB = os.getenv("POSTGRES_DB", "observa_db")
+DATABASE_URL = os.getenv("DATABASE_URL")
+if not DATABASE_URL:
+    required_settings = ("POSTGRES_USER", "POSTGRES_PASSWORD", "POSTGRES_HOST", "POSTGRES_DB")
+    missing_settings = [name for name in required_settings if not os.getenv(name)]
+    if missing_settings:
+        raise RuntimeError(
+            "Database configuration is incomplete. Set DATABASE_URL or provide: "
+            + ", ".join(required_settings)
+        )
 
-# Monta a URL final (ou usa DATABASE_URL diretamente, se definida)
-DATABASE_URL = os.getenv(
-    "DATABASE_URL",
-    f"postgresql+psycopg2://{POSTGRES_USER}:{POSTGRES_PASSWORD}@{POSTGRES_HOST}:{POSTGRES_PORT}/{POSTGRES_DB}"
-)
+    DATABASE_URL = URL.create(
+        drivername="postgresql+psycopg2",
+        username=os.environ["POSTGRES_USER"],
+        password=os.environ["POSTGRES_PASSWORD"],
+        host=os.environ["POSTGRES_HOST"],
+        port=int(os.getenv("POSTGRES_PORT", "5432")),
+        database=os.environ["POSTGRES_DB"],
+    )
 
 # Cria o engine SQLAlchemy
 engine = create_engine(DATABASE_URL, echo=False, future=True)
