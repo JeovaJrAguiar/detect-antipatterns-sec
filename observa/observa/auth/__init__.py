@@ -1,0 +1,1 @@
+"""Authentication primitives for the Observa API."""

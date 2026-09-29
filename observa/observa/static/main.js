@@ -74,6 +74,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     if (data.success) {
       localStorage.setItem("auth_token", data.token);
+      localStorage.setItem("auth_role", data.role);
       showApp();
     } else {
       alert("Invalid username or password.");
@@ -84,6 +85,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   logoutBtn.addEventListener("click", () => {
     localStorage.removeItem("auth_token");
+    localStorage.removeItem("auth_role");
     appContent.style.display = "none";
     loginScreen.style.display = "flex"; // volta a tela
     loginUser.value = "";

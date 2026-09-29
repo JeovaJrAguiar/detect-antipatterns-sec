@@ -16,6 +16,8 @@ dependencies = [
   "fastapi",
   "sqlalchemy",
   "alembic",
+  "PyJWT>=2.8,<3",
+  "pwdlib[argon2]>=0.2,<1",
   "psycopg2-binary",
   "httpx",
   "uvicorn",

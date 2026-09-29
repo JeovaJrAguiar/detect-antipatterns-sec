@@ -1,13 +1,21 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from sqlalchemy import text
 from pydantic import BaseModel
 from observa.database.database import engine
-from observa.database.repositories import SourceRepository, DetectorRepository
+from observa.database.repositories import DetectorRepository, SourceRepository
+from observa.database.database import SessionLocal
+from observa.database.models import UserModel
+from observa.auth.security import create_access_token, verify_password
 from typing import List
 
 router = APIRouter()
 class DeleteRequest(BaseModel):
     names: List[str]
+
+
+class LoginRequest(BaseModel):
+    username: str
+    password: str
         
 @router.delete("/clear")
 def clear_database():
@@ -26,7 +34,19 @@ def delete_sources(req: DeleteRequest):
     return {"message": f"Deleted detectors: {', '.join(req.names)}"}
 
 @router.post("/login")
-def login(data: dict):
-    if data.get("username") == "admin" and data.get("password") == "admin":
-        return {"success": True, "token": "SECRET123TOKEN"}
-    return {"success": False}
+def login(data: LoginRequest):
+    username = data.username.strip().lower()
+    with SessionLocal() as session:
+        user = session.query(UserModel).filter(UserModel.username == username).first()
+        if user is None or not user.is_active or not verify_password(data.password, user.password_hash):
+            raise HTTPException(status_code=401, detail="Invalid username or password")
+
+        token = create_access_token(username=user.username, role=user.role)
+        return {
+            "success": True,
+            "token": token,
+            "token_type": "bearer",
+            "expires_in": 900,
+            "username": user.username,
+            "role": user.role,
+        }

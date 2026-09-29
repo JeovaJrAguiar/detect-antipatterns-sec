@@ -6,4 +6,6 @@ dotenv
 psycopg2-binary
 sqlalchemy
 alembic
+PyJWT>=2.8,<3
+pwdlib[argon2]>=0.2,<1
 requests

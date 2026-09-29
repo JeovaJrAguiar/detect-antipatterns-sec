@@ -1,8 +1,25 @@
-from sqlalchemy import Column, Integer, Double, String, DateTime, ForeignKey
+from sqlalchemy import Boolean, CheckConstraint, Column, DateTime, Double, ForeignKey, Integer, String
 from observa.database.database import Base
 from sqlalchemy.dialects.postgresql import JSONB 
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
+
+class UserModel(Base):
+    __tablename__ = "users"
+    __table_args__ = (
+        CheckConstraint(
+            "role IN ('admin', 'operator', 'executor')",
+            name="ck_users_role",
+        ),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    username = Column(String(64), unique=True, nullable=False)
+    password_hash = Column(String(255), nullable=False)
+    role = Column(String(16), nullable=False)
+    is_active = Column(Boolean, nullable=False, default=True, server_default="true")
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
 
 class SourceModel(Base):
     __tablename__ = "sources"

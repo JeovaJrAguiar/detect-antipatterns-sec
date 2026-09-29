@@ -14,6 +14,7 @@ services:
       POSTGRES_DB: antipatterns
       POSTGRES_HOST: postgres
       POSTGRES_PORT: 5432
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:?JWT_SECRET_KEY precisa ser definida pelo script de desenvolvimento}
     depends_on:
       db:
         condition: service_healthy
