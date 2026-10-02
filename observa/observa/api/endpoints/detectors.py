@@ -1,7 +1,9 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from observa.framework.manager import global_manager as manager
+
 from observa.auth.dependencies import AuthenticatedUser, require_roles
+from observa.framework.manager import global_manager as manager
+from observa.security.ssrf_guard import validate_remote_url
 
 router = APIRouter()
 _manager = manager
@@ -16,7 +18,12 @@ def register_detector(
     req: DetectorRegisterRequest,
     _: AuthenticatedUser = Depends(require_roles("admin", "operator")),
 ):
-    _manager.register_detector(name_ap=req.antipattern, name=req.name, api_url=req.api_url)
+    try:
+        safe_url = validate_remote_url(req.api_url) if req.api_url else None
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    _manager.register_detector(name_ap=req.antipattern, name=req.name, api_url=safe_url)
     return {'message': f"Detector '{req.name}' registered"}
 
 @router.get('/list')
