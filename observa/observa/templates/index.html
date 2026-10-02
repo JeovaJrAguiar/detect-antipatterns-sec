@@ -117,6 +117,7 @@
                 <select id="source-select" class="form-select" multiple size="4"></select>
               </div>
 
+              <div id="source-registration-controls">
               <hr class="my-4">
 
               <h5>Add New Source</h5>
@@ -136,6 +137,7 @@
               </div>
 
               <button id="add-source-btn" class="btn btn-success">➕ Add Source</button>
+              </div>
             </div>
           </div>
 
@@ -220,6 +222,7 @@ if __name__ == "__main__":
                 <select id="detector-select" class="form-select" multiple size="4"></select>
               </div>
 
+              <div id="detector-registration-controls">
               <hr class="my-4">
 
               <h5>Add New Detector</h5>
@@ -240,6 +243,38 @@ if __name__ == "__main__":
               </div>
 
               <button id="add-detector-btn" class="btn btn-success">➕ Add Detector</button>
+              </div>
+            </div>
+          </div>
+
+          <div id="user-management-section" class="card mb-4 shadow-sm" hidden>
+            <div class="card-body">
+              <h4 class="card-title mb-3">User management</h4>
+              <div class="row g-2 align-items-end mb-4">
+                <div class="col-md-6">
+                  <label for="new-user-name" class="form-label">Username</label>
+                  <input id="new-user-name" class="form-control" autocomplete="off">
+                </div>
+                <div class="col-md-4">
+                  <label for="new-user-role" class="form-label">Role</label>
+                  <select id="new-user-role" class="form-select">
+                    <option value="operator">Operador</option>
+                    <option value="executor">Executor</option>
+                    <option value="admin">Admin</option>
+                  </select>
+                </div>
+                <div class="col-md-2">
+                  <button id="create-user-btn" class="btn btn-primary w-100">Create user</button>
+                </div>
+              </div>
+              <div class="table-responsive">
+                <table class="table align-middle">
+                  <thead>
+                    <tr><th>Username</th><th>Role</th><th>Active</th><th>Actions</th></tr>
+                  </thead>
+                  <tbody id="user-list"></tbody>
+                </table>
+              </div>
             </div>
           </div>
 

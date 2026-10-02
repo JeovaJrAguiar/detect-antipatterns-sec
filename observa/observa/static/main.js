@@ -53,11 +53,58 @@ document.addEventListener("DOMContentLoaded", () => {
     loginScreen.style.display = "flex";
   }
 
-  // Se já tiver token →  pula o login sem piscar
-  if (localStorage.getItem("auth_token")) {
+  function clearSession() {
+    localStorage.removeItem("auth_token");
+    localStorage.removeItem("auth_role");
+  }
+
+  async function apiFetch(url, options = {}) {
+    const headers = new Headers(options.headers || {});
+    const token = localStorage.getItem("auth_token");
+    if (token) headers.set("Authorization", `Bearer ${token}`);
+    const response = await fetch(url, { ...options, headers });
+    if (response.status === 401) {
+      clearSession();
+      showLogin();
+    }
+    return response;
+  }
+
+  function applyRole(role) {
+    const canManageCatalog = role === "admin" || role === "operator";
+    const isAdmin = role === "admin";
+    const isExecutor = role === "executor";
+
+    document.getElementById("source-registration-controls").hidden = !canManageCatalog;
+    document.getElementById("detector-registration-controls").hidden = !canManageCatalog;
+    document.getElementById("clear-db-btn").hidden = !isAdmin;
+    document.getElementById("user-management-section").hidden = !isAdmin;
+    document.querySelector('[data-bs-target="#tab-history"]').closest("li").hidden = isExecutor;
+    document.getElementById("tab-history").hidden = isExecutor;
+  }
+
+  async function activateUser(user) {
+    localStorage.setItem("auth_role", user.role);
+    applyRole(user.role);
     showApp();
-  } else {
-    showLogin();
+    await loadSources();
+    await loadDetectors();
+    if (user.role === "admin") await loadUsers();
+  }
+
+  async function restoreSession() {
+    if (!localStorage.getItem("auth_token")) {
+      showLogin();
+      return;
+    }
+
+    const response = await apiFetch("/api/v1/admin/me");
+    if (!response.ok) {
+      clearSession();
+      showLogin();
+      return;
+    }
+    await activateUser(await response.json());
   }
 
   loginBtn.addEventListener("click", async () => {
@@ -71,11 +118,9 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 
     const data = await res.json();
-
-    if (data.success) {
+    if (res.ok && data.success) {
       localStorage.setItem("auth_token", data.token);
-      localStorage.setItem("auth_role", data.role);
-      showApp();
+      await activateUser(data);
     } else {
       alert("Invalid username or password.");
     }
@@ -84,7 +129,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const logoutBtn = document.getElementById("logout-btn");
 
   logoutBtn.addEventListener("click", () => {
-    localStorage.removeItem("auth_token");
+    clearSession();
     localStorage.removeItem("auth_role");
     appContent.style.display = "none";
     loginScreen.style.display = "flex"; // volta a tela
@@ -97,6 +142,10 @@ document.addEventListener("DOMContentLoaded", () => {
   const resultOutput = document.getElementById("result-output");
   const sourceHistorySelect = document.getElementById("history-filter-source");
   const detectorHistorySelect = document.getElementById("history-filter-detector");
+  const userList = document.getElementById("user-list");
+  const newUserName = document.getElementById("new-user-name");
+  const newUserRole = document.getElementById("new-user-role");
+  const createUserBtn = document.getElementById("create-user-btn");
 
   // Campos do form de adicionar Source
   const addSourceBtn = document.getElementById("add-source-btn");
@@ -152,7 +201,7 @@ document.addEventListener("DOMContentLoaded", () => {
         const selectedDetectors = Array.from(detectorSelect.selectedOptions).map(opt => opt.value);
 
         // ---- Enviar tudo acumulado ao parar ----
-        const res = await fetch("/api/v1/runs/autorun", {
+        const res = await apiFetch("/api/v1/runs/autorun", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ source_name: selectedSources[0], data: autoRunBuffer, detector: selectedDetectors[0] })
@@ -178,7 +227,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const selectedSources = Array.from(sourceSelect.selectedOptions).map(opt => opt.value);
       const selectedDetectors = Array.from(detectorSelect.selectedOptions).map(opt => opt.value);
 
-      const res = await fetch("/api/v1/runs/collect", {
+      const res = await apiFetch("/api/v1/runs/collect", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ sources: selectedSources, detectors: selectedDetectors })
@@ -192,7 +241,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
       // Apagar apos o teste sintetico
       if(flag) {
-        const res1 = await fetch("/api/v1/runs/autorun", {
+        const res1 = await apiFetch("/api/v1/runs/autorun", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ source_name: selectedSources[0], data: autoRunBuffer, detector: selectedDetectors[0] })
@@ -216,7 +265,8 @@ document.addEventListener("DOMContentLoaded", () => {
   // Funções de load
   // ---------------------------
   async function loadSources() {
-    const res = await fetch("/api/v1/sources/list");
+    const res = await apiFetch("/api/v1/sources/list");
+    if (!res.ok) return;
     const data = await res.json();
     sourceSelect.innerHTML = "";
     sourceHistorySelect.innerHTML = "";
@@ -234,7 +284,8 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   async function loadDetectors() {
-    const res = await fetch("/api/v1/detectors/list");
+    const res = await apiFetch("/api/v1/detectors/list");
+    if (!res.ok) return;
     const data = await res.json();
     detectorHistorySelect.innerHTML = "";
     data.detectors.forEach(det => {
@@ -258,9 +309,103 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  // Carrega listas na inicialização
-  loadSources();
-  loadDetectors();
+  async function loadUsers() {
+    const response = await apiFetch("/api/v1/admin/users");
+    if (!response.ok) return;
+
+    const data = await response.json();
+    userList.replaceChildren();
+    data.users.forEach(user => {
+      const row = document.createElement("tr");
+      const usernameCell = document.createElement("td");
+      usernameCell.textContent = user.username;
+
+      const roleCell = document.createElement("td");
+      const roleSelect = document.createElement("select");
+      roleSelect.className = "form-select form-select-sm";
+      [["admin", "Admin"], ["operator", "Operador"], ["executor", "Executor"]]
+        .forEach(([value, label]) => {
+          const option = document.createElement("option");
+          option.value = value;
+          option.textContent = label;
+          option.selected = user.role === value;
+          roleSelect.appendChild(option);
+        });
+      roleCell.appendChild(roleSelect);
+
+      const activeCell = document.createElement("td");
+      const activeCheckbox = document.createElement("input");
+      activeCheckbox.type = "checkbox";
+      activeCheckbox.className = "form-check-input";
+      activeCheckbox.checked = user.is_active;
+      activeCell.appendChild(activeCheckbox);
+
+      const actionsCell = document.createElement("td");
+      const saveButton = document.createElement("button");
+      saveButton.type = "button";
+      saveButton.className = "btn btn-sm btn-outline-primary me-2";
+      saveButton.textContent = "Save";
+      saveButton.addEventListener("click", async () => {
+        const result = await apiFetch(`/api/v1/admin/users/${encodeURIComponent(user.username)}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ role: roleSelect.value, is_active: activeCheckbox.checked })
+        });
+        if (!result.ok) {
+          const error = await result.json();
+          alert(error.detail || "Unable to update user.");
+          return;
+        }
+        await loadUsers();
+      });
+
+      const deleteButton = document.createElement("button");
+      deleteButton.type = "button";
+      deleteButton.className = "btn btn-sm btn-outline-danger";
+      deleteButton.textContent = "Delete";
+      deleteButton.addEventListener("click", async () => {
+        if (!confirm(`Delete user '${user.username}'?`)) return;
+        const result = await apiFetch(`/api/v1/admin/users/${encodeURIComponent(user.username)}`, {
+          method: "DELETE"
+        });
+        if (!result.ok) {
+          const error = await result.json();
+          alert(error.detail || "Unable to delete user.");
+          return;
+        }
+        await loadUsers();
+      });
+
+      actionsCell.append(saveButton, deleteButton);
+      row.append(usernameCell, roleCell, activeCell, actionsCell);
+      userList.appendChild(row);
+    });
+  }
+
+  createUserBtn.addEventListener("click", async () => {
+    const username = newUserName.value.trim();
+    if (!username) {
+      alert("Enter a username.");
+      return;
+    }
+
+    const response = await apiFetch("/api/v1/admin/users", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, role: newUserRole.value })
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      alert(data.detail || "Unable to create user.");
+      return;
+    }
+
+    alert(`User: ${data.user.username}\nRole: ${data.user.role}\nInitial password: ${data.initial_password}\n\nSave this password now. It will not be shown again.`);
+    newUserName.value = "";
+    await loadUsers();
+  });
+
+  void restoreSession();
 
   // ---------------------------
   // Adicionar nova fonte
@@ -298,7 +443,7 @@ document.addEventListener("DOMContentLoaded", () => {
       return;
     }
 
-    const res = await fetch("/api/v1/sources/register", {
+    const res = await apiFetch("/api/v1/sources/register", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload)
@@ -330,7 +475,7 @@ document.addEventListener("DOMContentLoaded", () => {
       api_url: newDetectorApi.value
     };
 
-    const res = await fetch("/api/v1/detectors/register", {
+    const res = await apiFetch("/api/v1/detectors/register", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload)
@@ -354,7 +499,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const selectedSources = Array.from(sourceSelect.selectedOptions).map(opt => opt.value);
     const selectedDetectors = Array.from(detectorSelect.selectedOptions).map(opt => opt.value);
 
-    const res = await fetch("/api/v1/runs/execute", {
+    const res = await apiFetch("/api/v1/runs/execute", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ sources: selectedSources, detectors: selectedDetectors })
@@ -370,7 +515,7 @@ document.addEventListener("DOMContentLoaded", () => {
   clearDbBtn.addEventListener("click", async () => {
     if (!confirm("⚠️ This will delete all sources and detectors. Continue?")) return;
 
-    const res = await fetch("/api/v1/admin/clear", { method: "DELETE" });
+    const res = await apiFetch("/api/v1/admin/clear", { method: "DELETE" });
     const data = await res.json();
 
     alert(data.message);
@@ -385,7 +530,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
       if (!confirm(`⚠️ Delete selected sources: ${selected.join(", ")}?`)) return;
 
-      const res = await fetch("/api/v1/admin/sources", {
+      const res = await apiFetch("/api/v1/admin/sources", {
         method: "DELETE", // ou DELETE se preferir
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ names: selected })
@@ -405,7 +550,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
       if (!confirm(`⚠️ Delete selected detectors: ${selected.join(", ")}?`)) return;
 
-      const res = await fetch("/api/v1/admin/detectors", {
+      const res = await apiFetch("/api/v1/admin/detectors", {
         method: "DELETE", // ou DELETE
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ names: selected })
@@ -425,7 +570,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     const name = selectedOptions[0].value;
 
-    const res = await fetch(`/api/v1/sources/get?name=${encodeURIComponent(name)}`);
+    const res = await apiFetch(`/api/v1/sources/get?name=${encodeURIComponent(name)}`);
     if (!res.ok) {
       alert("Error fetching source details.");
       return;
@@ -442,7 +587,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     const name = selectedOptions[0].value;
 
-    const res = await fetch(`/api/v1/detectors/get?name=${encodeURIComponent(name)}`);
+    const res = await apiFetch(`/api/v1/detectors/get?name=${encodeURIComponent(name)}`);
     if (!res.ok) {
       alert("Error fetching detector details.");
       return;
@@ -619,7 +764,7 @@ ${(() => {
     if (start) url += `&start=${encodeURIComponent(start)}`;
     if (end) url += `&end=${encodeURIComponent(end)}`;
 
-    const res = await fetch(url);
+    const res = await apiFetch(url);
     const execs = await res.json();
 
     createOrUpdateHistoryChart(execs);

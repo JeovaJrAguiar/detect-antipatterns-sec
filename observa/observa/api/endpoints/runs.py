@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Body
+from fastapi import APIRouter, Body, Depends, HTTPException
 from pydantic import BaseModel
 from observa.framework.orchestrator import global_orchestrator as orchestrator
 from observa.framework.manager import global_manager as manager
@@ -8,6 +8,7 @@ from observa.detectors.remote_detector import RemoteDetector
 from typing import List, Dict, Any
 from datetime import datetime, timedelta
 import importlib
+from observa.auth.dependencies import AuthenticatedUser, require_roles
 
 router = APIRouter()
 
@@ -16,7 +17,10 @@ class RunRequest(BaseModel):
     detectors: List[str]
 
 @router.post('/execute')
-def execute_run(req: RunRequest):
+def execute_run(
+    req: RunRequest,
+    _: AuthenticatedUser = Depends(require_roles("admin", "operator", "executor")),
+):
     result = []    
     try:
         for src in req.sources:
@@ -45,7 +49,10 @@ def execute_run(req: RunRequest):
     return result
 
 @router.post('/autorun')
-def autorun(payload: Dict[str, Any] = Body(...)):
+def autorun(
+    payload: Dict[str, Any] = Body(...),
+    _: AuthenticatedUser = Depends(require_roles("admin", "operator", "executor")),
+):
     source_name = payload.get("source_name")
     data = payload.get("data")
     detector = payload.get("detector")
@@ -70,7 +77,10 @@ def autorun(payload: Dict[str, Any] = Body(...)):
     return result
 
 @router.post('/collect')
-def execute_run(req: RunRequest):
+def execute_run(
+    req: RunRequest,
+    _: AuthenticatedUser = Depends(require_roles("admin", "operator", "executor")),
+):
     result = []    
     try:
         for src in req.sources:
@@ -86,7 +96,13 @@ def execute_run(req: RunRequest):
     return result
 
 @router.get('/history')
-def execute_history(source: str, detector: str, start: str, end: str):
+def execute_history(
+    source: str,
+    detector: str,
+    start: str,
+    end: str,
+    _: AuthenticatedUser = Depends(require_roles("admin", "operator")),
+):
     source = manager.get_source(source)
     detector = manager.get_detector(detector)
     

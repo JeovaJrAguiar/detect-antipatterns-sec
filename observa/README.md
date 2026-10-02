@@ -21,4 +21,4 @@ Create the first administrator explicitly after applying migrations. The command
 BOOTSTRAP_ADMIN_USERNAME=admin BOOTSTRAP_ADMIN_PASSWORD='use-a-local-secret' python -m observa.auth.bootstrap_admin
 ```
 
-The development script creates a local-only `observa/.env` containing a generated JWT signing key and separate passwords for the Admin, Operador, and Executor accounts, then bootstraps any missing accounts without replacing existing passwords. This file is excluded from the Docker build context and Git.
+The development script creates a local-only `observa/.env` containing a generated JWT signing key and separate passwords for the Admin, Operador, and Executor accounts, then bootstraps any missing accounts without replacing existing passwords. This file is excluded from the Docker build context and Git. Users created by an Admin receive a generated initial password, shown only in the creation response, and can use it to log in immediately.
