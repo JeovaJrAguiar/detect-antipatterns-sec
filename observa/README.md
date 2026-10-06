@@ -11,6 +11,23 @@ alembic upgrade head
 uvicorn observa.app:app --reload
 ```
 
+For a frontend hosted on a different origin, set `OBSERVA_CORS_ORIGINS` to a comma-separated list of exact HTTP or HTTPS origins, such as `http://localhost:3000,https://app.example.com`. Leave it empty to deny cross-origin browser access. Wildcards and URL paths are rejected.
+
+## Rate limiting
+
+Rate limits use in-process memory and are therefore enforced independently by each API worker. HTTP limits are keyed by the connecting client IP; forwarded IP headers are not trusted. Remote source and detector calls share a separate per-host limit. Requests rejected by an HTTP limit receive `429` and `Retry-After`.
+
+Set `APP_ENV=development` to use the more permissive local defaults. All values can be overridden with `<count>/<second|minute|hour|day>`:
+
+| Variable | Protected operation | Development default | Other environments |
+|---|---|---:|---:|
+| `OBSERVA_RATE_LIMIT_LOGIN` | Login per client IP | `30/minute` | `5/minute` |
+| `OBSERVA_RATE_LIMIT_USER_CREATE` | User creation per client IP | `60/hour` | `5/hour` |
+| `OBSERVA_RATE_LIMIT_RUN` | Execute, autorun, and collect per client IP | `120/minute` | `20/minute` |
+| `OBSERVA_RATE_LIMIT_REMOTE` | Outbound calls per destination host | `120/minute` | `30/minute` |
+
+These process-local limits are an application-level guard, not a substitute for shared limits at an ingress when deploying multiple workers or replicas.
+
 See [MIGRATIONS.md](MIGRATIONS.md) for fresh database setup and the safe transition of an existing database previously created with `Base.metadata.create_all()`.
 
 ## Initial administrator

@@ -8,6 +8,7 @@ from fastapi.responses import HTMLResponse
 from observa.api.router import router as api_router
 from observa.framework.orchestrator import global_orchestrator as orchestrator
 from observa.security.cors import parse_allowed_origins
+from observa.security.rate_limit import RateLimitMiddleware
 
 orchestrator.load()
 
@@ -18,6 +19,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.add_middleware(RateLimitMiddleware)
 app.include_router(api_router)
 app.mount("/static", StaticFiles(directory="observa/static"), name="static")
 templates = Jinja2Templates(directory="observa/templates")

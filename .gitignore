@@ -205,3 +205,8 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+
+./alerting_detector.py
+./angicos_detector.py
+./alerts-angicos-v1.json
