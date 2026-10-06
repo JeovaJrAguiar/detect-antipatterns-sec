@@ -12,6 +12,21 @@ from observa.auth.dependencies import AuthenticatedUser, require_roles
 
 router = APIRouter()
 
+
+def get_source_or_404(name: str):
+    source = manager.get_source(name)
+    if source is None:
+        raise HTTPException(status_code=404, detail=f"Source '{name}' not found")
+    return source
+
+
+def get_detector_or_404(name: str):
+    detector = manager.get_detector(name)
+    if detector is None:
+        raise HTTPException(status_code=404, detail=f"Detector '{name}' not found")
+    return detector
+
+
 class RunRequest(BaseModel):
     sources: List[str]
     detectors: List[str]
@@ -25,13 +40,13 @@ def execute_run(
     try:
         for src in req.sources:
             for det in req.detectors:
-                source = manager.get_source(src)                
+                source = get_source_or_404(src)
+                detector = get_detector_or_404(det)
                 if source.api_url:
                     sourceObj = RemoteSource(name=source.name, api_url=source.api_url)    
                 else:
                     sourceObj = DataSource(name=source.name, json_data=source.json_data)                    
                 
-                detector = manager.get_detector(det)                
                 if detector.api_url:
                     detectorObj = RemoteDetector(nameAP=detector.name_ap, name=detector.name, api_url=detector.api_url)
                 else:
@@ -59,7 +74,8 @@ def autorun(
     
     result = [] 
     try:
-        detector = manager.get_detector(detector)                
+        source = get_source_or_404(source_name)
+        detector = get_detector_or_404(detector)
         if detector.api_url:
             detectorObj = RemoteDetector(nameAP=detector.name_ap, name=detector.name, api_url=detector.api_url)
         else:
@@ -68,8 +84,7 @@ def autorun(
             cls = getattr(module, class_name)
             detectorObj = cls(nameAP=detector.name_ap,name=detector.name)
     
-        resultTemp = orchestrator.autorun(source_name=source_name, detector=detectorObj, data=data)  
-        source = manager.get_source(source_name)                
+        resultTemp = orchestrator.autorun(source_name=source_name, detector=detectorObj, data=data)
         manager.register_history(source_id=source.id, detector_id=detector.id, result=resultTemp)               
         result.append(resultTemp)
     except ValueError as e:
@@ -84,7 +99,7 @@ def execute_run(
     result = []    
     try:
         for src in req.sources:
-            source = manager.get_source(src)                
+            source = get_source_or_404(src)
             if source.api_url:
                 sourceObj = RemoteSource(name=source.name, api_url=source.api_url)    
             else:
@@ -103,11 +118,19 @@ def execute_history(
     end: str,
     _: AuthenticatedUser = Depends(require_roles("admin", "operator")),
 ):
-    source = manager.get_source(source)
-    detector = manager.get_detector(detector)
-    
-    start_dt = datetime.fromisoformat(start) + timedelta(hours=3)
-    end_dt = datetime.fromisoformat(end) + timedelta(hours=3)
+    source = get_source_or_404(source)
+    detector = get_detector_or_404(detector)
+
+    try:
+        start_dt = datetime.fromisoformat(start) + timedelta(hours=3)
+        end_dt = datetime.fromisoformat(end) + timedelta(hours=3)
+        if start_dt > end_dt:
+            raise ValueError("start must not be after end")
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid date range. Provide ISO 8601 start and end values with start before or equal to end.",
+        ) from exc
     
     history = manager.get_history(source_id=source.id,detector_id=detector.id, start=start_dt, end=end_dt)
     
