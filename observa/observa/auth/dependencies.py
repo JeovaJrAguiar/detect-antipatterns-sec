@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from typing import Callable, Optional
 
 import jwt
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import select
 
@@ -22,6 +22,7 @@ class AuthenticatedUser:
 
 
 def get_authenticated_user(
+    request: Request,
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(bearer_scheme),
 ) -> AuthenticatedUser:
     unauthorized = HTTPException(
@@ -50,6 +51,7 @@ def get_authenticated_user(
             username=user.username,
             role=user.role,
         )
+    request.state.user_id = principal.id
     return principal
 
 

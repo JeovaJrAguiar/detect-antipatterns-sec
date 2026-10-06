@@ -3,16 +3,17 @@ from observa.framework.manager import global_manager as manager
 from observa.framework.base import Source, Detector
 from dotenv import load_dotenv
 from typing import Dict, Any, List
+import logging
 import time
 import os
 import importlib
 
+logger = logging.getLogger(__name__)
+
 class Orchestrator:
     def load(self):
-        print("\n####### Observa Framework #######\n")
-        
+        logger.info("orchestrator_starting")
         load_dotenv()
-        print("Loaded environment variables ...")
 
         SOURCES_LOCAL_NAME = os.getenv("SOURCES_LOCAL_NAME", "")
         SOURCES_LOCAL_PATH = os.getenv("SOURCES_LOCAL_PATH", "")
@@ -27,8 +28,6 @@ class Orchestrator:
         _namesObject_source = [item.strip() for item in SOURCES_LOCAL_OBJECT_NAME.split(',') if item.strip()]
         _packagesObject_source = [item.strip() for item in SOURCES_LOCAL_OBJECT_PACKAGE.split(',') if item.strip()]
 
-        print("\n####### Available sources #######\n")
-
         for i, value in enumerate(_names_source):
             if not manager.get_source(value):
                 _json = JsonSource(name=value,path=_paths_source[i])        
@@ -42,23 +41,21 @@ class Orchestrator:
                 source = cls(name=value)
                 manager.register_source(source)                
             
-        for item in set(manager.list_sources()):
-            print(item)
-
         _names_detectors = [item.strip() for item in DETECTOR_LOCAL_NAME.split(',') if item.strip()]
         _path_detectors = [item.strip() for item in DETECTOR_LOCAL_PATH.split(',') if item.strip()]
         _aps = [item.strip() for item in DETECTOR_LOCAL_AP.split(',') if item.strip()]       
-
-        print("\n####### Available detectors #######\n")
 
         for i, value in enumerate(_names_detectors):
             if not manager.get_detector(value):
                 manager.register_detector(name_ap=_aps[i], name=value, class_path=_path_detectors[i])
 
-        for item in set(manager.list_detectors()):
-            print(item.name_ap + " - " + item.name)
-                
-        print("\nReady !!!\n")
+        logger.info(
+            "orchestrator_ready",
+            extra={
+                "source_count": len(manager.list_sources()),
+                "detector_count": len(manager.list_detectors()),
+            },
+        )
         
     def run(self, detector: Detector, source: Source) -> Dict[str, Any]: 
         data = source.load()

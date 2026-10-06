@@ -28,6 +28,10 @@ Set `APP_ENV=development` to use the more permissive local defaults. All values 
 
 These process-local limits are an application-level guard, not a substitute for shared limits at an ingress when deploying multiple workers or replicas.
 
+## Structured logging and request correlation
+
+Application logs are JSON written to standard output. Set `OBSERVA_LOG_LEVEL` to configure the minimum level (default `INFO`). Each HTTP response carries `X-Request-ID`: a valid UUID supplied by the caller is normalized and reused; otherwise the application generates one. Request logs include the ID, method, path without query parameters, status, duration, and `user_id` only after the server validates the user's token and active account. Request bodies, authorization headers, tokens, and telemetry are not logged.
+
 See [MIGRATIONS.md](MIGRATIONS.md) for fresh database setup and the safe transition of an existing database previously created with `Base.metadata.create_all()`.
 
 ## Initial administrator
