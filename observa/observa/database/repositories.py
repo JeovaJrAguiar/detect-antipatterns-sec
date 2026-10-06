@@ -1,12 +1,17 @@
 from observa.database.database import SessionLocal
 from observa.database.models import SourceModel, DetectorModel, HistoryModel
 from datetime import datetime
+from observa.security.telemetry_masking import mask_telemetry
 
 class SourceRepository:
     @staticmethod
     def add_source(name: str, api_url: str = None, json_content: dict = None):
         db = SessionLocal()
-        src = SourceModel(name=name, api_url=api_url, json_data=json_content)
+        src = SourceModel(
+            name=name,
+            api_url=api_url,
+            json_data=mask_telemetry(json_content) if json_content is not None else None,
+        )
         db.add(src)
         db.commit()
         db.close()
@@ -66,7 +71,14 @@ class HistoryRepository:
     @staticmethod
     def add_history(source_id: int, detector_id: int, detected: int, total: int, execution_time: int, result: dict):
         db = SessionLocal()
-        entry = HistoryModel(source_id=source_id,detector_id=detector_id,detected=detected,total=total,execution_time=execution_time,result=result)
+        entry = HistoryModel(
+            source_id=source_id,
+            detector_id=detector_id,
+            detected=detected,
+            total=total,
+            execution_time=execution_time,
+            result=mask_telemetry(result),
+        )
         db.add(entry)
         db.commit()
         db.close()

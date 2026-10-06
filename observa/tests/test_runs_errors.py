@@ -3,13 +3,20 @@ from unittest.mock import Mock
 
 import pytest
 from fastapi import HTTPException
+from starlette.requests import Request
 
 from observa.api.endpoints import runs
 from observa.auth.dependencies import AuthenticatedUser
 from observa.api.endpoints.runs import RunRequest
+from observa.security import audit
 
 
 USER = AuthenticatedUser(id=7, username="operator", role="operator")
+
+
+@pytest.fixture(autouse=True)
+def stub_audit_writer(monkeypatch):
+    monkeypatch.setattr(audit, "record_security_event", Mock())
 
 
 def _endpoint(path, method="POST"):
@@ -29,6 +36,19 @@ def _source():
     )
 
 
+def _request():
+    return Request(
+        {
+            "type": "http",
+            "method": "POST",
+            "path": "/api/v1/runs",
+            "headers": [],
+            "client": ("127.0.0.1", 12345),
+            "state": {},
+        }
+    )
+
+
 def _remote_detector():
     return SimpleNamespace(
         id=22,
@@ -44,7 +64,9 @@ def test_execute_returns_404_when_source_is_missing(monkeypatch):
 
     with pytest.raises(HTTPException) as error:
         _endpoint("/execute")(
-            RunRequest(sources=["missing-source"], detectors=["detector-a"]), USER
+            RunRequest(sources=["missing-source"], detectors=["detector-a"]),
+            _request(),
+            USER,
         )
 
     assert error.value.status_code == 404
@@ -59,7 +81,9 @@ def test_execute_returns_404_when_detector_is_missing(monkeypatch):
 
     with pytest.raises(HTTPException) as error:
         _endpoint("/execute")(
-            RunRequest(sources=["source-a"], detectors=["missing-detector"]), USER
+            RunRequest(sources=["source-a"], detectors=["missing-detector"]),
+            _request(),
+            USER,
         )
 
     assert error.value.status_code == 404
@@ -74,6 +98,7 @@ def test_autorun_returns_404_when_detector_is_missing(monkeypatch):
 
     with pytest.raises(HTTPException) as error:
         _endpoint("/autorun")(
+            _request(),
             {"source_name": "source-a", "detector": "missing-detector", "data": []},
             USER,
         )
@@ -94,6 +119,7 @@ def test_autorun_returns_404_for_missing_source_before_running_detector(monkeypa
 
     with pytest.raises(HTTPException) as error:
         _endpoint("/autorun")(
+            _request(),
             {"source_name": "missing-source", "detector": "detector-a", "data": []},
             USER,
         )
@@ -108,7 +134,7 @@ def test_collect_returns_404_when_source_is_missing(monkeypatch):
 
     with pytest.raises(HTTPException) as error:
         _endpoint("/collect")(
-            RunRequest(sources=["missing-source"], detectors=[]), USER
+            RunRequest(sources=["missing-source"], detectors=[]), _request(), USER
         )
 
     assert error.value.status_code == 404

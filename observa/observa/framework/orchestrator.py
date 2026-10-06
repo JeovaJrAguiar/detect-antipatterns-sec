@@ -7,13 +7,18 @@ import logging
 import time
 import os
 import importlib
+from observa.security.telemetry_masking import TelemetryMaskingProcessor
 
 logger = logging.getLogger(__name__)
 
 class Orchestrator:
+    def __init__(self):
+        self.telemetry_masker = None
+
     def load(self):
         logger.info("orchestrator_starting")
         load_dotenv()
+        self.telemetry_masker = TelemetryMaskingProcessor.from_environment()
 
         SOURCES_LOCAL_NAME = os.getenv("SOURCES_LOCAL_NAME", "")
         SOURCES_LOCAL_PATH = os.getenv("SOURCES_LOCAL_PATH", "")
@@ -58,7 +63,7 @@ class Orchestrator:
         )
         
     def run(self, detector: Detector, source: Source) -> Dict[str, Any]: 
-        data = source.load()
+        data = self._mask_telemetry(source.load())
         start = time.time()        
         result = detector.detect(data)        
         end = time.time()   
@@ -66,10 +71,10 @@ class Orchestrator:
         result.setdefault('source', source.name)        
         result.setdefault('detector', detector.name)
         result.setdefault('execution_time_ms', round((end - start) * 1000, 3))
-        return result
+        return self._mask_telemetry(result)
     
     def autorun(self, detector: Detector, data: List[Dict[str, Any]], source_name: str) -> Dict[str, Any]: 
-        data = data
+        data = self._mask_telemetry(data)
         start = time.time()        
         result = detector.detect(data)        
         end = time.time()       
@@ -77,6 +82,11 @@ class Orchestrator:
         result.setdefault('source', source_name)        
         result.setdefault('detector', detector.name)
         result.setdefault('execution_time_ms', round((end - start) * 1000, 3))
-        return result
+        return self._mask_telemetry(result)
+
+    def _mask_telemetry(self, data: Any) -> Any:
+        if self.telemetry_masker is None:
+            self.telemetry_masker = TelemetryMaskingProcessor.from_environment()
+        return self.telemetry_masker.process(data)
         
 global_orchestrator = Orchestrator()    

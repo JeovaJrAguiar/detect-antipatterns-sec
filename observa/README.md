@@ -38,6 +38,12 @@ Apply migrations with `alembic upgrade head` before starting the API. Security e
 
 The migration installs PostgreSQL triggers that reject `UPDATE`, `DELETE`, and `TRUNCATE`, plus revokes mutation privileges from `PUBLIC`. SQLite also receives `UPDATE`/`DELETE` guards for local verification. Treat the migration owner as privileged schema administration; normal application connections should use a non-superuser role, while the triggers enforce immutability even for table owners.
 
+## Telemetry masking
+
+The `Data Masking Processor` runs before data reaches local or remote detectors, before local source JSON or detection results are persisted, and before `/runs/collect` returns source data. It returns a sanitized copy and preserves the analysis fields `count` and `quantidade`. By default, fields named `password`, `passwd`, `secret`, `token`, `access_token`, `refresh_token`, `api_key`, `authorization`, `cookie`, `set_cookie`, `email`, `cpf`, `cnpj`, `phone`, `telephone`, `telefone`, `celular`, or `connection_string` are replaced with `[REDACTED]`, case-insensitively and at any nesting level. Value patterns also redact email addresses, Brazilian CPF/CNPJ formats, Bearer tokens, labeled password/token values, and credentials embedded in PostgreSQL/MySQL/MongoDB connection URLs.
+
+Set `OBSERVA_MASKING_FIELDS` to add comma-separated sensitive field names or dotted paths, `OBSERVA_MASKING_PATTERNS` to add a JSON array of regular expressions, and `OBSERVA_MASKING_PRESERVED_FIELDS` to add comma-separated field names/paths that must remain available to detectors. Defaults cannot be removed. A field configured as both masked and preserved, or an invalid regex configuration, causes startup to fail. Custom patterns replace matched text with `[REDACTED]`; configure them narrowly to avoid masking values needed for detection.
+
 See [MIGRATIONS.md](MIGRATIONS.md) for fresh database setup and the safe transition of an existing database previously created with `Base.metadata.create_all()`.
 
 ## Initial administrator

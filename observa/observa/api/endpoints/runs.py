@@ -10,6 +10,7 @@ from datetime import datetime, timedelta
 import importlib
 from observa.auth.dependencies import AuthenticatedUser, require_roles
 from observa.security import audit
+from observa.security.telemetry_masking import mask_telemetry
 
 router = APIRouter()
 
@@ -136,7 +137,7 @@ def execute_run(
             else:
                 sourceObj = DataSource(name=source.name, json_data=source.json_data)                    
             
-            result.append(sourceObj.load())
+            result.append(mask_telemetry(sourceObj.load()))
     except HTTPException:
         audit_run_event(request, current_user.id, "run.collect", "failure")
         raise
