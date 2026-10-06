@@ -1,4 +1,5 @@
-from sqlalchemy import Boolean, CheckConstraint, Column, DateTime, Double, ForeignKey, Integer, String
+from sqlalchemy import Boolean, CheckConstraint, Column, DateTime, Double, ForeignKey, Index, Integer, String, event
+from sqlalchemy.schema import DDL
 from observa.database.database import Base
 from sqlalchemy.dialects.postgresql import JSONB 
 from sqlalchemy.sql import func
@@ -19,6 +20,56 @@ class UserModel(Base):
     role = Column(String(16), nullable=False)
     is_active = Column(Boolean, nullable=False, default=True, server_default="true")
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class SecurityAuditLogModel(Base):
+    __tablename__ = "security_audit_log"
+    __table_args__ = (
+        CheckConstraint(
+            "outcome IN ('success', 'failure')",
+            name="ck_security_audit_log_outcome",
+        ),
+        Index("ix_security_audit_log_occurred_at", "occurred_at"),
+        Index("ix_security_audit_log_actor_user_id", "actor_user_id"),
+    )
+
+    id = Column(Integer, primary_key=True)
+    actor_user_id = Column(Integer, nullable=True)
+    action = Column(String(100), nullable=False)
+    resource_type = Column(String(64), nullable=True)
+    resource_id = Column(String(255), nullable=True)
+    occurred_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    outcome = Column(String(16), nullable=False)
+    client_ip = Column(String(45), nullable=True)
+    request_id = Column(String(36), nullable=True)
+
+
+event.listen(
+    SecurityAuditLogModel.__table__,
+    "after_create",
+    DDL(
+        """
+        CREATE TRIGGER security_audit_log_reject_update
+        BEFORE UPDATE ON security_audit_log
+        BEGIN
+            SELECT RAISE(ABORT, 'security audit log is append-only');
+        END
+        """
+    ).execute_if(dialect="sqlite"),
+)
+event.listen(
+    SecurityAuditLogModel.__table__,
+    "after_create",
+    DDL(
+        """
+        CREATE TRIGGER security_audit_log_reject_delete
+        BEFORE DELETE ON security_audit_log
+        BEGIN
+            SELECT RAISE(ABORT, 'security audit log is append-only');
+        END
+        """
+    ).execute_if(dialect="sqlite"),
+)
 
 
 class SourceModel(Base):

@@ -1,7 +1,7 @@
 import secrets
 from typing import Literal, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 
@@ -9,6 +9,7 @@ from observa.auth.dependencies import AuthenticatedUser, get_authenticated_user,
 from observa.auth.security import hash_password, verify_password
 from observa.database.database import SessionLocal
 from observa.database.models import UserModel
+from observa.security import audit
 
 router = APIRouter()
 Role = Literal["admin", "operator", "executor"]
@@ -75,7 +76,8 @@ def list_users(_: AuthenticatedUser = Depends(require_roles("admin"))):
 @router.post("/users", status_code=status.HTTP_201_CREATED)
 def create_user(
     request: UserCreateRequest,
-    _: AuthenticatedUser = Depends(require_roles("admin")),
+    http_request: Request,
+    current_user: AuthenticatedUser = Depends(require_roles("admin")),
 ):
     username = request.username.strip().lower()
     initial_password = secrets.token_urlsafe(24)
@@ -94,6 +96,16 @@ def create_user(
             is_active=True,
         )
         session.add(user)
+        session.flush()
+        audit.record_security_event(
+            action="user.create",
+            outcome="success",
+            actor_user_id=current_user.id,
+            resource_type="user",
+            resource_id=str(user.id),
+            request=http_request,
+            session=session,
+        )
         session.commit()
 
     return {
@@ -107,6 +119,7 @@ def create_user(
 def update_user(
     username: str,
     request: UserUpdateRequest,
+    http_request: Request,
     current_user: AuthenticatedUser = Depends(require_roles("admin")),
 ):
     if request.role is None and request.is_active is None:
@@ -129,6 +142,15 @@ def update_user(
             user.role = request.role
         if request.is_active is not None:
             user.is_active = request.is_active
+        audit.record_security_event(
+            action="user.update",
+            outcome="success",
+            actor_user_id=current_user.id,
+            resource_type="user",
+            resource_id=str(user.id),
+            request=http_request,
+            session=session,
+        )
         session.commit()
         session.refresh(user)
         return {"user": user_summary(user)}
@@ -137,6 +159,7 @@ def update_user(
 @router.delete("/users/{username}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_user(
     username: str,
+    request: Request,
     current_user: AuthenticatedUser = Depends(require_roles("admin")),
 ):
     with SessionLocal() as session:
@@ -149,5 +172,14 @@ def delete_user(
             raise HTTPException(status_code=409, detail="An admin cannot delete their own account")
 
         ensure_not_last_active_admin(session, user, role="deleted", active=False)
+        audit.record_security_event(
+            action="user.delete",
+            outcome="success",
+            actor_user_id=current_user.id,
+            resource_type="user",
+            resource_id=str(user.id),
+            request=request,
+            session=session,
+        )
         session.delete(user)
         session.commit()

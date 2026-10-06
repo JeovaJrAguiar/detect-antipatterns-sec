@@ -61,9 +61,10 @@ class RequestLoggingMiddleware:
             await self.app(scope, receive, send)
             return
 
-        request_id = self._request_id(scope)
+        request_id = self._request_id()
         request_context_token = request_id_context.set(request_id)
         request_state = scope.setdefault("state", {})
+        request_state["request_id"] = request_id
         started_at = time.perf_counter()
         status_code = 500
         error_type = None
@@ -103,11 +104,5 @@ class RequestLoggingMiddleware:
             request_id_context.reset(request_context_token)
 
     @staticmethod
-    def _request_id(scope: Scope) -> str:
-        for name, value in scope.get("headers", []):
-            if name.lower() == b"x-request-id":
-                try:
-                    return str(uuid.UUID(value.decode("ascii")))
-                except (UnicodeDecodeError, ValueError):
-                    break
+    def _request_id() -> str:
         return str(uuid.uuid4())

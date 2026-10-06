@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Body, Depends, HTTPException
+from fastapi import APIRouter, Body, Depends, HTTPException, Request
 from pydantic import BaseModel
 from observa.framework.orchestrator import global_orchestrator as orchestrator
 from observa.framework.manager import global_manager as manager
@@ -9,6 +9,7 @@ from typing import List, Dict, Any
 from datetime import datetime, timedelta
 import importlib
 from observa.auth.dependencies import AuthenticatedUser, require_roles
+from observa.security import audit
 
 router = APIRouter()
 
@@ -31,10 +32,22 @@ class RunRequest(BaseModel):
     sources: List[str]
     detectors: List[str]
 
+
+def audit_run_event(request: Request, actor_user_id: int, action: str, outcome: str) -> None:
+    audit.record_security_event(
+        action=action,
+        outcome=outcome,
+        actor_user_id=actor_user_id,
+        resource_type="analysis",
+        request=request,
+    )
+
+
 @router.post('/execute')
 def execute_run(
     req: RunRequest,
-    _: AuthenticatedUser = Depends(require_roles("admin", "operator", "executor")),
+    request: Request,
+    current_user: AuthenticatedUser = Depends(require_roles("admin", "operator", "executor")),
 ):
     result = []    
     try:
@@ -59,14 +72,23 @@ def execute_run(
                 manager.register_history(source_id=source.id, detector_id=detector.id, result=resultTemp)
                     
                 result.append(resultTemp)
+    except HTTPException:
+        audit_run_event(request, current_user.id, "run.execute", "failure")
+        raise
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        audit_run_event(request, current_user.id, "run.execute", "failure")
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except Exception:
+        audit_run_event(request, current_user.id, "run.execute", "failure")
+        raise
+    audit_run_event(request, current_user.id, "run.execute", "success")
     return result
 
 @router.post('/autorun')
 def autorun(
+    request: Request,
     payload: Dict[str, Any] = Body(...),
-    _: AuthenticatedUser = Depends(require_roles("admin", "operator", "executor")),
+    current_user: AuthenticatedUser = Depends(require_roles("admin", "operator", "executor")),
 ):
     source_name = payload.get("source_name")
     data = payload.get("data")
@@ -87,14 +109,23 @@ def autorun(
         resultTemp = orchestrator.autorun(source_name=source_name, detector=detectorObj, data=data)
         manager.register_history(source_id=source.id, detector_id=detector.id, result=resultTemp)               
         result.append(resultTemp)
+    except HTTPException:
+        audit_run_event(request, current_user.id, "run.autorun", "failure")
+        raise
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        audit_run_event(request, current_user.id, "run.autorun", "failure")
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except Exception:
+        audit_run_event(request, current_user.id, "run.autorun", "failure")
+        raise
+    audit_run_event(request, current_user.id, "run.autorun", "success")
     return result
 
 @router.post('/collect')
 def execute_run(
     req: RunRequest,
-    _: AuthenticatedUser = Depends(require_roles("admin", "operator", "executor")),
+    request: Request,
+    current_user: AuthenticatedUser = Depends(require_roles("admin", "operator", "executor")),
 ):
     result = []    
     try:
@@ -106,8 +137,16 @@ def execute_run(
                 sourceObj = DataSource(name=source.name, json_data=source.json_data)                    
             
             result.append(sourceObj.load())
+    except HTTPException:
+        audit_run_event(request, current_user.id, "run.collect", "failure")
+        raise
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        audit_run_event(request, current_user.id, "run.collect", "failure")
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except Exception:
+        audit_run_event(request, current_user.id, "run.collect", "failure")
+        raise
+    audit_run_event(request, current_user.id, "run.collect", "success")
     return result
 
 @router.get('/history')

@@ -11,8 +11,8 @@ from observa.security.observability import (
 )
 
 
-def test_request_logging_correlates_response_and_logs_validated_user_id(caplog):
-    request_id = "97a66355-b385-4fa6-9a0d-73f3249cb28e"
+def test_request_logging_generates_server_id_and_logs_validated_user_id(caplog):
+    client_request_id = "97a66355-b385-4fa6-9a0d-73f3249cb28e"
 
     async def exercise_request():
         async def downstream_app(scope, receive, send):
@@ -35,7 +35,7 @@ def test_request_logging_correlates_response_and_logs_validated_user_id(caplog):
             "path": "/api/v1/users/me",
             "query_string": b"token=must-not-be-logged",
             "client": ("127.0.0.1", 12345),
-            "headers": [(b"x-request-id", request_id.encode("ascii"))],
+            "headers": [(b"x-request-id", client_request_id.encode("ascii"))],
         }
         await middleware(scope, receive, send)
         return messages
@@ -44,7 +44,9 @@ def test_request_logging_correlates_response_and_logs_validated_user_id(caplog):
         messages = asyncio.run(exercise_request())
 
     response_headers = dict(messages[0]["headers"])
-    assert response_headers[b"x-request-id"] == request_id.encode("ascii")
+    request_id = response_headers[b"x-request-id"].decode("ascii")
+    assert request_id != client_request_id
+    assert str(uuid.UUID(request_id)) == request_id
     record = next(record for record in caplog.records if record.name == "observa.request")
     assert record.request_id == request_id
     assert record.user_id == 42
@@ -55,6 +57,7 @@ def test_request_logging_correlates_response_and_logs_validated_user_id(caplog):
     assert structured["event"] == "http_request"
     assert structured["request_id"] == request_id
     assert structured["user_id"] == 42
+    assert structured["request_id"] == request_id
     assert "must-not-be-logged" not in json.dumps(structured)
 
 
@@ -130,8 +133,11 @@ def test_request_id_is_included_on_unhandled_server_error(caplog):
         messages = asyncio.run(exercise_request())
 
     assert messages[0]["status"] == 500
-    assert dict(messages[0]["headers"])[b"x-request-id"] == request_id.encode("ascii")
+    response_request_id = dict(messages[0]["headers"])[b"x-request-id"].decode("ascii")
+    assert response_request_id != request_id
+    assert str(uuid.UUID(response_request_id)) == response_request_id
     record = next(record for record in caplog.records if record.name == "observa.request")
     assert record.status_code == 500
     assert record.error_type == "RuntimeError"
+    assert record.request_id == response_request_id
     assert "sensitive exception detail" not in record.getMessage()

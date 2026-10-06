@@ -1,10 +1,11 @@
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
 from observa.auth.dependencies import AuthenticatedUser, require_roles
 from observa.framework.manager import global_manager as manager
+from observa.security import audit
 from observa.security.ssrf_guard import validate_remote_url
 from observa.sources.data_source import DataSource
 from observa.sources.remote_source import RemoteSource
@@ -19,7 +20,8 @@ class SourceRegisterRequest(BaseModel):
 @router.post('/register')
 def register_source(
     req: SourceRegisterRequest,
-    _: AuthenticatedUser = Depends(require_roles("admin", "operator")),
+    request: Request,
+    current_user: AuthenticatedUser = Depends(require_roles("admin", "operator")),
 ):
     try:
         safe_url = validate_remote_url(req.api_url) if req.api_url else None
@@ -32,6 +34,14 @@ def register_source(
         source = DataSource(name=req.name, json_data=req.json_data)
     if source:
         manager.register_source(source)
+        audit.record_security_event(
+            action="source.create",
+            outcome="success",
+            actor_user_id=current_user.id,
+            resource_type="source",
+            resource_id=source.name,
+            request=request,
+        )
         return {'message': f"Source '{source.name}' registered"}
     else:
         return {'message': 'error'}
