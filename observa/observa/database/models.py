@@ -31,6 +31,7 @@ class SecurityAuditLogModel(Base):
         ),
         Index("ix_security_audit_log_occurred_at", "occurred_at"),
         Index("ix_security_audit_log_actor_user_id", "actor_user_id"),
+        Index("ix_security_audit_log_trace_id", "trace_id"),
     )
 
     id = Column(Integer, primary_key=True)
@@ -41,6 +42,7 @@ class SecurityAuditLogModel(Base):
     occurred_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     outcome = Column(String(16), nullable=False)
     client_ip = Column(String(45), nullable=True)
+    trace_id = Column(String(36), nullable=True)
     request_id = Column(String(36), nullable=True)
 
 

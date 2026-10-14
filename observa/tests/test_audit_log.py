@@ -1,4 +1,9 @@
-from sqlalchemy import create_engine, delete, select, update
+import importlib.util
+from pathlib import Path
+
+from alembic.migration import MigrationContext
+from alembic.operations import Operations
+from sqlalchemy import create_engine, delete, inspect, select, text, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import sessionmaker
 import pytest
@@ -35,6 +40,7 @@ def test_audit_events_persist_context_and_reject_mutations(monkeypatch):
         assert event.action == "auth.login"
         assert event.outcome == "failure"
         assert event.client_ip == "192.0.2.10"
+        assert event.trace_id == "d7977caa-c81c-40c4-8175-86b5df8fbd13"
         assert event.request_id == "d7977caa-c81c-40c4-8175-86b5df8fbd13"
         event_id = event.id
         long_resource = session.scalar(
@@ -74,5 +80,39 @@ def test_audit_events_persist_context_and_reject_mutations(monkeypatch):
         )
     with session_factory() as session:
         assert len(session.scalars(select(SecurityAuditLogModel)).all()) == 4
+
+    engine.dispose()
+
+
+def test_trace_id_migration_backfills_existing_request_ids():
+    engine = create_engine("sqlite://")
+    with engine.begin() as connection:
+        connection.exec_driver_sql(
+            "CREATE TABLE security_audit_log (id INTEGER PRIMARY KEY, request_id VARCHAR(36))"
+        )
+        connection.exec_driver_sql(
+            "INSERT INTO security_audit_log (id, request_id) VALUES (1, 'legacy-trace-id')"
+        )
+
+        migration_path = (
+            Path(__file__).resolve().parents[1]
+            / "migrations"
+            / "versions"
+            / "20261014_0006_trace_id.py"
+        )
+        spec = importlib.util.spec_from_file_location("trace_id_migration", migration_path)
+        assert spec is not None and spec.loader is not None
+        migration = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(migration)
+
+        with Operations.context(MigrationContext.configure(connection)):
+            migration.upgrade()
+
+        assert connection.scalar(
+            text("SELECT trace_id FROM security_audit_log WHERE id = 1")
+        ) == "legacy-trace-id"
+        assert "ix_security_audit_log_trace_id" in {
+            index["name"] for index in inspect(connection).get_indexes("security_audit_log")
+        }
 
     engine.dispose()

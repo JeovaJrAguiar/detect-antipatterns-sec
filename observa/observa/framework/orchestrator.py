@@ -8,6 +8,7 @@ import time
 import os
 import importlib
 from observa.security.telemetry_masking import TelemetryMaskingProcessor
+from observa.security.observability import trace_span
 
 logger = logging.getLogger(__name__)
 
@@ -63,26 +64,32 @@ class Orchestrator:
         )
         
     def run(self, detector: Detector, source: Source) -> Dict[str, Any]: 
-        data = self._mask_telemetry(source.load())
-        start = time.time()        
-        result = detector.detect(data)        
-        end = time.time()   
-        result.setdefault('ap', detector.nameAP)
-        result.setdefault('source', source.name)        
-        result.setdefault('detector', detector.name)
-        result.setdefault('execution_time_ms', round((end - start) * 1000, 3))
-        return self._mask_telemetry(result)
+        with trace_span("analysis.run"):
+            with trace_span("source.load"):
+                data = source.load()
+            data = self._mask_telemetry(data)
+            start = time.time()
+            with trace_span("detector.detect"):
+                result = detector.detect(data)
+            end = time.time()
+            result.setdefault('ap', detector.nameAP)
+            result.setdefault('source', source.name)
+            result.setdefault('detector', detector.name)
+            result.setdefault('execution_time_ms', round((end - start) * 1000, 3))
+            return self._mask_telemetry(result)
     
     def autorun(self, detector: Detector, data: List[Dict[str, Any]], source_name: str) -> Dict[str, Any]: 
-        data = self._mask_telemetry(data)
-        start = time.time()        
-        result = detector.detect(data)        
-        end = time.time()       
-        result.setdefault('ap', detector.nameAP)
-        result.setdefault('source', source_name)        
-        result.setdefault('detector', detector.name)
-        result.setdefault('execution_time_ms', round((end - start) * 1000, 3))
-        return self._mask_telemetry(result)
+        with trace_span("analysis.autorun"):
+            data = self._mask_telemetry(data)
+            start = time.time()
+            with trace_span("detector.detect"):
+                result = detector.detect(data)
+            end = time.time()
+            result.setdefault('ap', detector.nameAP)
+            result.setdefault('source', source_name)
+            result.setdefault('detector', detector.name)
+            result.setdefault('execution_time_ms', round((end - start) * 1000, 3))
+            return self._mask_telemetry(result)
 
     def _mask_telemetry(self, data: Any) -> Any:
         if self.telemetry_masker is None:

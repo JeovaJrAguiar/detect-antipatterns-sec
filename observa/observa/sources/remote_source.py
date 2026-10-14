@@ -3,6 +3,7 @@ from typing import Any
 import requests
 
 from observa.framework.base import Source
+from observa.security.observability import trace_headers
 from observa.security.rate_limit import enforce_remote_rate_limit
 from observa.security.ssrf_guard import validate_remote_url
 
@@ -13,7 +14,12 @@ class RemoteSource(Source):
         enforce_remote_rate_limit(url)
         session = requests.Session()
         session.max_redirects = 3
-        response = session.get(url, timeout=10, allow_redirects=False)
+        response = session.get(
+            url,
+            timeout=10,
+            allow_redirects=False,
+            headers=trace_headers(),
+        )
 
         if response.is_redirect:
             raise ValueError("Remote source requests must not redirect to another destination.")

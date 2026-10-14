@@ -17,6 +17,7 @@ def record_security_event(
     resource_id: Optional[str] = None,
     request: Optional[Request] = None,
     client_ip: Optional[str] = None,
+    trace_id: Optional[str] = None,
     request_id: Optional[str] = None,
     session: Optional[Session] = None,
     connection: Optional[Connection] = None,
@@ -26,8 +27,16 @@ def record_security_event(
             actor_user_id = getattr(request.state, "user_id", None)
         if client_ip is None and request.client is not None:
             client_ip = request.client.host
+        if trace_id is None:
+            trace_id = getattr(request.state, "trace_id", None)
         if request_id is None:
             request_id = getattr(request.state, "request_id", None)
+    if trace_id is None:
+        trace_id = request_id
+    if request_id is None:
+        request_id = trace_id
+    if trace_id == "-":
+        trace_id = None
     if request_id == "-":
         request_id = None
     if resource_id is not None:
@@ -40,6 +49,7 @@ def record_security_event(
         "resource_id": resource_id,
         "outcome": outcome,
         "client_ip": client_ip,
+        "trace_id": trace_id,
         "request_id": request_id,
     }
     if session is not None:

@@ -28,7 +28,7 @@ def _request():
             "path": "/api/v1/test",
             "headers": [],
             "client": ("198.51.100.20", 54321),
-            "state": {"request_id": REQUEST_ID, "user_id": USER.id},
+            "state": {"trace_id": REQUEST_ID, "request_id": REQUEST_ID, "user_id": USER.id},
         }
     )
 
@@ -212,6 +212,7 @@ def test_user_creation_and_deletion_keep_audit_rows_after_account_removal(monkey
             ("user.create", USER.id)
         ]
         assert audit_rows[0].client_ip == "198.51.100.20"
+        assert audit_rows[0].trace_id == REQUEST_ID
         assert audit_rows[0].request_id == REQUEST_ID
         user_database_id = created_user.id
 
