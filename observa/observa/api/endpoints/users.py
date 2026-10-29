@@ -1,8 +1,9 @@
+import unicodedata
 from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field, field_validator
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 
 from observa.auth.dependencies import AuthenticatedUser, get_authenticated_user, require_roles
@@ -20,10 +21,24 @@ router = APIRouter()
 Role = Literal["admin", "operator", "executor"]
 
 
+def _normalize_display_name(username: str) -> str:
+    normalized = username.strip()
+    if any(unicodedata.category(character) == "Cc" for character in normalized):
+        raise ValueError("Display names cannot contain control characters")
+    return normalized
+
+
 class UserCreateRequest(BaseModel):
-    username: str = Field(min_length=3, max_length=64, pattern=r"^[a-zA-Z0-9][a-zA-Z0-9._-]*$")
+    username: str = Field(min_length=1, max_length=128)
     email: str = Field(min_length=6, max_length=254)
     role: Role
+
+    @field_validator("username", mode="before")
+    @classmethod
+    def normalize_username(cls, username: str) -> str:
+        if not isinstance(username, str) or not username.strip():
+            raise ValueError("A non-empty display name is required")
+        return _normalize_display_name(username)
 
     @field_validator("email")
     @classmethod
@@ -32,15 +47,19 @@ class UserCreateRequest(BaseModel):
 
 
 class UserUpdateRequest(BaseModel):
-    username: Optional[str] = Field(
-        default=None,
-        min_length=3,
-        max_length=64,
-        pattern=r"^[a-zA-Z0-9][a-zA-Z0-9._-]*$",
-    )
+    username: Optional[str] = Field(default=None, min_length=1, max_length=128)
     email: Optional[str] = Field(default=None, min_length=6, max_length=254)
     role: Optional[Role] = None
     is_active: Optional[bool] = None
+
+    @field_validator("username", mode="before")
+    @classmethod
+    def normalize_username(cls, username: Optional[str]) -> Optional[str]:
+        if username is None:
+            return None
+        if not isinstance(username, str) or not username.strip():
+            raise ValueError("A non-empty display name is required")
+        return _normalize_display_name(username)
 
     @field_validator("email")
     @classmethod
@@ -56,6 +75,7 @@ class UserPasswordUpdateRequest(BaseModel):
 
 def user_summary(user: UserModel) -> dict:
     return {
+        "id": user.id,
         "username": user.username,
         "email": user.email,
         "role": user.role,
@@ -91,6 +111,7 @@ def get_current_account(
     user: AuthenticatedUser = Depends(get_authenticated_user),
 ):
     return {
+        "id": user.id,
         "username": user.username,
         "role": user.role,
     }
@@ -109,18 +130,16 @@ def create_user(
     http_request: Request,
     current_user: AuthenticatedUser = Depends(require_roles("admin")),
 ):
-    username = request.username.strip().lower()
+    username = request.username
     email = request.email.strip().lower()
     initial_password = generate_strong_password()
 
     with SessionLocal() as session:
         existing_user = session.scalar(
-            select(UserModel).where(
-                (UserModel.username == username) | (UserModel.email == email)
-            )
+            select(UserModel).where(UserModel.email == email)
         )
         if existing_user is not None:
-            raise HTTPException(status_code=409, detail="Username or email already exists")
+            raise HTTPException(status_code=409, detail="Email already exists")
 
         user = UserModel(
             username=username,
@@ -136,7 +155,7 @@ def create_user(
             session.rollback()
             raise HTTPException(
                 status_code=409,
-                detail="Username or email already exists",
+                detail="Email already exists",
             ) from error
         audit.record_security_event(
             action="user.create",
@@ -147,10 +166,12 @@ def create_user(
             request=http_request,
             session=session,
         )
+        created_user_id = user.id
         session.commit()
 
     return {
         "user": {
+            "id": created_user_id,
             "username": username,
             "email": email,
             "role": request.role,
@@ -161,9 +182,9 @@ def create_user(
     }
 
 
-@router.patch("/users/{username}")
+@router.patch("/users/{user_id}")
 def update_user(
-    username: str,
+    user_id: int,
     request: UserUpdateRequest,
     http_request: Request,
     current_user: AuthenticatedUser = Depends(require_roles("admin")),
@@ -180,33 +201,22 @@ def update_user(
         )
 
     with SessionLocal() as session:
-        user = session.scalar(
-            select(UserModel).where(UserModel.username == username.strip().lower())
-        )
+        user = session.get(UserModel, user_id)
         if user is None:
             raise HTTPException(status_code=404, detail="User not found")
 
-        updated_username = request.username.strip().lower() if request.username else None
+        updated_username = request.username
         updated_email = request.email.strip().lower() if request.email else None
-        username_changed = updated_username is not None and updated_username != user.username
         email_changed = updated_email is not None and updated_email != user.email
-        if username_changed or email_changed:
-            uniqueness_conditions = []
-            if username_changed:
-                uniqueness_conditions.append(UserModel.username == updated_username)
-            if email_changed:
-                uniqueness_conditions.append(UserModel.email == updated_email)
+        if email_changed:
             existing_user = session.scalar(
                 select(UserModel).where(
                     UserModel.id != user.id,
-                    or_(*uniqueness_conditions),
+                    UserModel.email == updated_email,
                 )
             )
             if existing_user is not None:
-                raise HTTPException(
-                    status_code=409,
-                    detail="Username or email already exists",
-                )
+                raise HTTPException(status_code=409, detail="Email already exists")
 
         ensure_not_last_active_admin(session, user, request.role, request.is_active)
         if user.id == current_user.id and user.role == "admin" and request.role not in (None, "admin"):
@@ -235,19 +245,16 @@ def update_user(
             session.commit()
         except IntegrityError as error:
             session.rollback()
-            if username_changed or email_changed:
-                raise HTTPException(
-                    status_code=409,
-                    detail="Username or email already exists",
-                ) from error
+            if email_changed:
+                raise HTTPException(status_code=409, detail="Email already exists") from error
             raise
         session.refresh(user)
         return {"user": user_summary(user)}
 
 
-@router.patch("/users/{username}/password")
+@router.patch("/users/{user_id}/password")
 def update_user_password(
-    username: str,
+    user_id: int,
     request: UserPasswordUpdateRequest,
     http_request: Request,
     current_user: AuthenticatedUser = Depends(require_roles("admin")),
@@ -260,9 +267,7 @@ def update_user_password(
         )
 
     with SessionLocal() as session:
-        user = session.scalar(
-            select(UserModel).where(UserModel.username == username.strip().lower())
-        )
+        user = session.get(UserModel, user_id)
         if user is None:
             raise HTTPException(status_code=404, detail="User not found")
 
@@ -281,16 +286,14 @@ def update_user_password(
     return {"message": "Password updated successfully"}
 
 
-@router.delete("/users/{username}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/users/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_user(
-    username: str,
+    user_id: int,
     request: Request,
     current_user: AuthenticatedUser = Depends(require_roles("admin")),
 ):
     with SessionLocal() as session:
-        user = session.scalar(
-            select(UserModel).where(UserModel.username == username.strip().lower())
-        )
+        user = session.get(UserModel, user_id)
         if user is None:
             raise HTTPException(status_code=404, detail="User not found")
         if user.id == current_user.id:

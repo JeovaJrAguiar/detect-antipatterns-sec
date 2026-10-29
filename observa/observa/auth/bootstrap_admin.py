@@ -8,7 +8,7 @@ from observa.database.models import UserModel
 
 
 def main() -> None:
-    username = os.getenv("BOOTSTRAP_ADMIN_USERNAME", "").strip().lower()
+    username = os.getenv("BOOTSTRAP_ADMIN_USERNAME", "").strip()
     raw_email = os.getenv("BOOTSTRAP_ADMIN_EMAIL", "")
     password = os.getenv("BOOTSTRAP_ADMIN_PASSWORD", "")
     if not username or not raw_email or not password:
@@ -25,12 +25,14 @@ def main() -> None:
 
     with SessionLocal() as session:
         existing_admin = session.scalar(
-            select(UserModel).where(UserModel.username == username)
+            select(UserModel).where(UserModel.email == email)
         )
         if existing_admin is not None:
             if existing_admin.role != "admin" or not existing_admin.is_active:
                 raise SystemExit("The configured bootstrap account exists but is not an active admin")
-            print(f"Admin '{username}' ja existe; senha e conta foram preservadas.")
+            print(
+                f"Admin '{existing_admin.username}' ja existe; senha e conta foram preservadas."
+            )
             return
 
         session.add(

@@ -108,7 +108,7 @@ document.addEventListener("DOMContentLoaded", () => {
       operator: "Operador",
       executor: "Executor"
     };
-    currentUser = { username: user.username, role: user.role };
+    currentUser = { id: user.id, username: user.username, role: user.role };
     currentUsernameLabel.textContent = user.username;
     accountUsernameLabel.textContent = user.username;
     accountRoleLabel.textContent = roleLabels[user.role] || user.role;
@@ -177,12 +177,13 @@ document.addEventListener("DOMContentLoaded", () => {
   const newUserEmail = document.getElementById("new-user-email");
   const newUserRole = document.getElementById("new-user-role");
   const createUserBtn = document.getElementById("create-user-btn");
+  newUserName.maxLength = 128;
   const passwordResetModal = document.getElementById("password-reset-modal");
   const resetPasswordInput = document.getElementById("reset-user-password");
   const confirmResetPasswordInput = document.getElementById("confirm-reset-user-password");
   const passwordConfirmationMessage = document.getElementById("password-confirmation-message");
   const saveUserPasswordBtn = document.getElementById("save-user-password-btn");
-  let passwordResetUsername = null;
+  let passwordResetUserId = null;
 
   function updatePasswordRequirements() {
     const password = resetPasswordInput.value;
@@ -217,7 +218,7 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   passwordResetModal.addEventListener("hidden.bs.modal", () => {
-    passwordResetUsername = null;
+    passwordResetUserId = null;
     resetPasswordInput.value = "";
     confirmResetPasswordInput.value = "";
     passwordConfirmationMessage.textContent = "";
@@ -226,11 +227,11 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   saveUserPasswordBtn.addEventListener("click", async () => {
-    if (!passwordResetUsername || saveUserPasswordBtn.disabled) return;
+    if (!passwordResetUserId || saveUserPasswordBtn.disabled) return;
 
     saveUserPasswordBtn.disabled = true;
     const response = await apiFetch(
-      `/api/v1/admin/users/${encodeURIComponent(passwordResetUsername)}/password`,
+      `/api/v1/admin/users/${passwordResetUserId}/password`,
       {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -423,7 +424,7 @@ document.addEventListener("DOMContentLoaded", () => {
       usernameInput.type = "text";
       usernameInput.className = "form-control form-control-sm";
       usernameInput.value = user.username;
-      usernameInput.maxLength = 64;
+      usernameInput.maxLength = 128;
       usernameInput.autocomplete = "off";
       usernameCell.appendChild(usernameInput);
 
@@ -462,9 +463,9 @@ document.addEventListener("DOMContentLoaded", () => {
       saveButton.className = "btn btn-sm btn-outline-primary me-2";
       saveButton.textContent = "Save";
       saveButton.addEventListener("click", async () => {
-        const updatedUsername = usernameInput.value.trim().toLowerCase();
+        const updatedUsername = usernameInput.value.trim();
         const updatedEmail = emailInput.value.trim().toLowerCase();
-        const result = await apiFetch(`/api/v1/admin/users/${encodeURIComponent(user.username)}`, {
+        const result = await apiFetch(`/api/v1/admin/users/${user.id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -480,8 +481,12 @@ document.addEventListener("DOMContentLoaded", () => {
           return;
         }
 
-        if (currentUser?.username === user.username) {
-          updateAccountMenu({ username: updatedUsername, role: currentUser.role });
+        if (currentUser?.id === user.id) {
+          updateAccountMenu({
+            id: currentUser.id,
+            username: updatedUsername,
+            role: currentUser.role
+          });
         }
         await loadUsers();
       });
@@ -491,7 +496,7 @@ document.addEventListener("DOMContentLoaded", () => {
       resetPasswordButton.className = "btn btn-sm btn-outline-secondary me-2";
       resetPasswordButton.textContent = "Change password";
       resetPasswordButton.addEventListener("click", () => {
-        passwordResetUsername = user.username;
+        passwordResetUserId = user.id;
         document.getElementById("password-reset-title").textContent =
           `Change password for ${user.username}`;
         resetPasswordInput.value = "";
@@ -506,7 +511,7 @@ document.addEventListener("DOMContentLoaded", () => {
       deleteButton.textContent = "Delete";
       deleteButton.addEventListener("click", async () => {
         if (!confirm(`Delete user '${user.username}'?`)) return;
-        const result = await apiFetch(`/api/v1/admin/users/${encodeURIComponent(user.username)}`, {
+        const result = await apiFetch(`/api/v1/admin/users/${user.id}`, {
           method: "DELETE"
         });
         if (!result.ok) {

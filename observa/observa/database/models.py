@@ -16,7 +16,7 @@ class UserModel(Base):
     )
 
     id = Column(Integer, primary_key=True, index=True)
-    username = Column(String(64), unique=True, nullable=False)
+    username = Column(String(128), nullable=False)
     email = Column(String(254), nullable=False)
     password_hash = Column(String(255), nullable=False)
     role = Column(String(16), nullable=False)

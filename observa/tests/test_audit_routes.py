@@ -205,12 +205,10 @@ def test_user_creation_and_deletion_keep_audit_rows_after_account_removal(monkey
         _request(),
         USER,
     )
-    created_user_id = response["user"]["username"]
+    created_user_id = response["user"]["id"]
 
     with session_factory() as session:
-        created_user = session.scalar(
-            select(UserModel).where(UserModel.username == created_user_id)
-        )
+        created_user = session.get(UserModel, created_user_id)
         assert created_user is not None
         audit_rows = session.scalars(select(SecurityAuditLogModel)).all()
         assert [(row.action, row.actor_user_id) for row in audit_rows] == [
@@ -221,8 +219,8 @@ def test_user_creation_and_deletion_keep_audit_rows_after_account_removal(monkey
         assert audit_rows[0].request_id == REQUEST_ID
         user_database_id = created_user.id
 
-    _endpoint(user_endpoints.router, "/users/{username}", method="DELETE")(
-        "new-operator", _request(), USER
+    _endpoint(user_endpoints.router, "/users/{user_id}", method="DELETE")(
+        user_database_id, _request(), USER
     )
 
     with session_factory() as session:

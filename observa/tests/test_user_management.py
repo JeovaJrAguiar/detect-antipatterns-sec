@@ -7,7 +7,7 @@ from fastapi import HTTPException
 from fastapi.security import HTTPAuthorizationCredentials
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
-from sqlalchemy import create_engine, select, text
+from sqlalchemy import create_engine, inspect, select, text
 from sqlalchemy.orm import sessionmaker
 from starlette.requests import Request
 
@@ -81,24 +81,82 @@ def _endpoint(path, method):
     )
 
 
-def test_admin_can_change_username_and_username_is_normalized(session_factory):
-    response = _endpoint("/users/{username}", "PATCH")(
-        "operator",
-        users.UserUpdateRequest(username="New-Operator"),
+def test_admin_can_create_person_name_username_without_changing_case(session_factory, monkeypatch):
+    monkeypatch.setattr(users, "hash_password", lambda password: "encoded-password")
+    response = _endpoint("/users", "POST")(
+        users.UserCreateRequest(
+            username="  Aguiar Júnior  ",
+            email="aguiar@example.com",
+            role="operator",
+        ),
         _request(),
         ADMIN,
     )
 
-    assert response["user"]["username"] == "new-operator"
+    assert response["user"]["username"] == "Aguiar Júnior"
     with session_factory() as session:
         assert session.scalar(
-            select(UserModel).where(UserModel.username == "new-operator")
+            select(UserModel).where(UserModel.username == "Aguiar Júnior")
         ) is not None
 
 
+def test_duplicate_usernames_are_allowed_for_different_accounts(session_factory, monkeypatch):
+    monkeypatch.setattr(users, "hash_password", lambda password: "encoded-password")
+    response = _endpoint("/users", "POST")(
+        users.UserCreateRequest(
+            username="admin",
+            email="another-admin@example.com",
+            role="operator",
+        ),
+        _request(),
+        ADMIN,
+    )
+
+    assert response["user"]["username"] == "admin"
+
+
+def test_usernames_reject_empty_and_whitespace_only_values():
+    with pytest.raises(ValueError):
+        users.UserCreateRequest(
+            username="   ",
+            email="empty@example.com",
+            role="operator",
+        )
+    with pytest.raises(ValueError):
+        users.UserUpdateRequest(username="   ")
+    with pytest.raises(ValueError):
+        users.UserCreateRequest(
+            username="Aguiar\nJúnior",
+            email="control@example.com",
+            role="operator",
+        )
+
+
+def test_usernames_enforce_maximum_length():
+    with pytest.raises(ValueError):
+        users.UserCreateRequest(
+            username="A" * 129,
+            email="long@example.com",
+            role="operator",
+        )
+
+
+def test_admin_can_rename_user_by_id_preserving_unicode_and_case(session_factory):
+    response = _endpoint("/users/{user_id}", "PATCH")(
+        OPERATOR.id,
+        users.UserUpdateRequest(username="  Aguiar Júnior "),
+        _request(),
+        ADMIN,
+    )
+
+    assert response["user"]["username"] == "Aguiar Júnior"
+    with session_factory() as session:
+        assert session.get(UserModel, OPERATOR.id).username == "Aguiar Júnior"
+
+
 def test_admin_can_change_email_and_email_is_normalized(session_factory):
-    response = _endpoint("/users/{username}", "PATCH")(
-        "operator",
+    response = _endpoint("/users/{user_id}", "PATCH")(
+        OPERATOR.id,
         users.UserUpdateRequest(email="  New.Operator@Example.COM "),
         _request(),
         ADMIN,
@@ -112,8 +170,8 @@ def test_email_must_be_valid_and_unique(session_factory):
         users.UserUpdateRequest(email="not-an-email")
 
     with pytest.raises(HTTPException) as error:
-        _endpoint("/users/{username}", "PATCH")(
-            "operator",
+        _endpoint("/users/{user_id}", "PATCH")(
+            OPERATOR.id,
             users.UserUpdateRequest(email="admin@observa.com"),
             _request(),
             ADMIN,
@@ -216,6 +274,7 @@ def test_login_uses_email_and_returns_display_username(monkeypatch):
     )
 
     assert response["username"] == "operador"
+    assert response["id"] == 29
     assert response["email"] == "operador@observa.com"
     create_token.assert_called_once_with(user_id=29, username="operador", role="operator")
 
@@ -227,16 +286,15 @@ def test_login_request_requires_a_valid_email():
         clear.LoginRequest(username="admin", password="anything")
 
 
-def test_username_change_rejects_duplicate_username(session_factory):
-    with pytest.raises(HTTPException) as error:
-        _endpoint("/users/{username}", "PATCH")(
-            "operator",
-            users.UserUpdateRequest(username="admin"),
-            _request(),
-            ADMIN,
-        )
+def test_user_rename_allows_duplicate_display_names(session_factory):
+    response = _endpoint("/users/{user_id}", "PATCH")(
+        OPERATOR.id,
+        users.UserUpdateRequest(username="admin"),
+        _request(),
+        ADMIN,
+    )
 
-    assert error.value.status_code == 409
+    assert response["user"]["username"] == "admin"
 
 
 def test_password_policy_requires_each_rule():
@@ -289,8 +347,8 @@ def test_admin_can_reset_password_without_returning_or_auditing_it(
     audit_record = Mock()
     monkeypatch.setattr(users.audit, "record_security_event", audit_record)
 
-    response = _endpoint("/users/{username}/password", "PATCH")(
-        "operator",
+    response = _endpoint("/users/{user_id}/password", "PATCH")(
+        OPERATOR.id,
         users.UserPasswordUpdateRequest(password="Abcdefg1!"),
         _request(),
         ADMIN,
@@ -310,8 +368,8 @@ def test_admin_can_reset_password_without_returning_or_auditing_it(
 
 def test_password_reset_rejects_weak_password(session_factory):
     with pytest.raises(HTTPException) as error:
-        _endpoint("/users/{username}/password", "PATCH")(
-            "operator",
+        _endpoint("/users/{user_id}/password", "PATCH")(
+            OPERATOR.id,
             users.UserPasswordUpdateRequest(password="weak"),
             _request(),
             ADMIN,
@@ -325,7 +383,7 @@ def test_password_reset_endpoint_requires_admin_role():
     route = next(
         route
         for route in users.router.routes
-        if route.path == "/users/{username}/password"
+        if route.path == "/users/{user_id}/password"
     )
     require_admin = route.dependant.dependencies[0].call
 
@@ -335,7 +393,7 @@ def test_password_reset_endpoint_requires_admin_role():
     assert error.value.status_code == 403
 
 
-def test_inactive_user_is_rejected_even_with_a_valid_token(
+def test_legacy_token_resolves_username_only_when_unambiguous(
     session_factory, monkeypatch
 ):
     monkeypatch.setattr(
@@ -347,9 +405,50 @@ def test_inactive_user_is_rejected_even_with_a_valid_token(
 
     assert dependencies.get_authenticated_user(_request(), credentials) == OPERATOR
 
+
+def test_legacy_token_with_duplicate_username_is_rejected(
+    session_factory, monkeypatch
+):
     with session_factory() as session:
-        user = session.scalar(select(UserModel).where(UserModel.username == "operator"))
-        assert user is not None
+        session.add(
+            UserModel(
+                id=3,
+                username="operator",
+                email="another-operator@example.com",
+                password_hash="hash",
+                role="executor",
+                is_active=True,
+            )
+        )
+        session.commit()
+
+    monkeypatch.setattr(
+        dependencies,
+        "decode_access_token",
+        lambda token: {"sub": "operator"},
+    )
+    credentials = HTTPAuthorizationCredentials(scheme="Bearer", credentials="valid-token")
+
+    with pytest.raises(HTTPException) as error:
+        dependencies.get_authenticated_user(_request(), credentials)
+
+    assert error.value.status_code == 401
+
+
+def test_inactive_user_is_rejected_even_with_a_valid_token(
+    session_factory, monkeypatch
+):
+    monkeypatch.setattr(
+        dependencies,
+        "decode_access_token",
+        lambda token: {"uid": OPERATOR.id, "sub": "operator"},
+    )
+    credentials = HTTPAuthorizationCredentials(scheme="Bearer", credentials="valid-token")
+
+    assert dependencies.get_authenticated_user(_request(), credentials) == OPERATOR
+
+    with session_factory() as session:
+        user = session.get(UserModel, OPERATOR.id)
         user.is_active = False
         session.commit()
 
@@ -416,4 +515,44 @@ def test_email_migration_assigns_standard_addresses_and_legacy_placeholders():
         ("executor", "executor@observa.com"),
         ("custom-user", "user-4@legacy.invalid"),
     ]
+    engine.dispose()
+
+
+def test_username_migration_removes_uniqueness_and_allows_long_names():
+    migration_path = (
+        Path(__file__).parents[1]
+        / "migrations"
+        / "versions"
+        / "20261029_0008_display_names.py"
+    )
+    spec = importlib.util.spec_from_file_location("display_names_migration", migration_path)
+    migration = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(migration)
+
+    engine = create_engine("sqlite://")
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "CREATE TABLE users (id INTEGER PRIMARY KEY, username VARCHAR(64) "
+                "NOT NULL, email VARCHAR(254) NOT NULL, "
+                "password_hash VARCHAR(255) NOT NULL, role VARCHAR(16) NOT NULL, "
+                "is_active BOOLEAN NOT NULL, created_at DATETIME NOT NULL, "
+                "CONSTRAINT uq_users_email UNIQUE (email), UNIQUE (username))"
+            )
+        )
+        with Operations.context(MigrationContext.configure(connection)):
+            migration.upgrade()
+
+        constraints = inspect(connection).get_unique_constraints("users")
+        assert {tuple(constraint["column_names"]) for constraint in constraints} == {
+            ("email",)
+        }
+        connection.execute(
+            text(
+                "INSERT INTO users (id, username, email, password_hash, role, is_active, created_at) "
+                "VALUES (1, 'Aguiar Júnior', 'first@example.com', 'hash', 'admin', 1, CURRENT_TIMESTAMP), "
+                "(2, 'Aguiar Júnior', 'second@example.com', 'hash', 'operator', 1, CURRENT_TIMESTAMP)"
+            )
+        )
+
     engine.dispose()

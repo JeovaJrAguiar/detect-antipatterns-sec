@@ -111,6 +111,7 @@ def login(data: LoginRequest, request: Request):
             "token": token,
             "token_type": "bearer",
             "expires_in": 900,
+            "id": user.id,
             "username": user.username,
             "email": user.email,
             "role": user.role,

@@ -31,16 +31,14 @@ def main() -> None:
 
     with SessionLocal() as session:
         existing_users = {
-            user.username: user
+            user.email: user
             for user in session.scalars(
-                select(UserModel).where(
-                    UserModel.username.in_([account[0] for account in accounts])
-                )
+                select(UserModel).where(UserModel.email.in_([account[2] for account in accounts]))
             )
         }
 
         for username, role, email, password in accounts:
-            existing_user = existing_users.get(username)
+            existing_user = existing_users.get(email)
             if existing_user is not None and (
                 existing_user.role != role
                 or not existing_user.is_active
@@ -53,7 +51,7 @@ def main() -> None:
 
         created_users = []
         for username, role, email, password in accounts:
-            if username not in existing_users:
+            if email not in existing_users:
                 session.add(
                     UserModel(
                         username=username,
@@ -63,7 +61,7 @@ def main() -> None:
                         is_active=True,
                     )
                 )
-                created_users.append(username)
+                created_users.append(email)
 
         session.commit()
 
