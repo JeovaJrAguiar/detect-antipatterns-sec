@@ -38,12 +38,15 @@ def get_authenticated_user(
     except (jwt.InvalidTokenError, TypeError, ValueError):
         raise unauthorized
 
-    username = claims.get("sub")
-    if not isinstance(username, str) or not username:
-        raise unauthorized
-
     with SessionLocal() as session:
-        user = session.scalar(select(UserModel).where(UserModel.username == username))
+        user_id = claims.get("uid")
+        if isinstance(user_id, int) and not isinstance(user_id, bool):
+            user = session.get(UserModel, user_id)
+        else:
+            username = claims.get("sub")
+            if not isinstance(username, str) or not username:
+                raise unauthorized
+            user = session.scalar(select(UserModel).where(UserModel.username == username))
         if user is None or not user.is_active or user.role not in VALID_ROLES:
             raise unauthorized
         principal = AuthenticatedUser(

@@ -52,10 +52,14 @@ See [MIGRATIONS.md](MIGRATIONS.md) for fresh database setup and the safe transit
 
 ## Initial administrator
 
-Create the first administrator explicitly after applying migrations. The command requires a username and a password with at least 12 characters and never resets an existing account:
+Create the first administrator explicitly after applying migrations. The command requires a username, email, and a password with at least 12 characters and never resets an existing account:
 
 ```sh
-BOOTSTRAP_ADMIN_USERNAME=admin BOOTSTRAP_ADMIN_PASSWORD='use-a-local-secret' python -m observa.auth.bootstrap_admin
+BOOTSTRAP_ADMIN_USERNAME=admin BOOTSTRAP_ADMIN_EMAIL=admin@example.com BOOTSTRAP_ADMIN_PASSWORD='use-a-local-secret' python -m observa.auth.bootstrap_admin
 ```
 
-The development script creates a local-only `observa/.env` containing a generated JWT signing key and separate passwords for the Admin, Operador, and Executor accounts, then bootstraps any missing accounts without replacing existing passwords. This file is excluded from the Docker build context and Git. Users created by an Admin receive a generated initial password, shown only in the creation response, and can use it to log in immediately.
+Users sign in with their email and password. Usernames are display names and remain visible in the account menu. The development accounts use `admin@observa.com`, `operador@observa.com`, and `executor@observa.com`.
+
+The development script creates a local-only `observa/.env` containing a generated JWT signing key and separate passwords for the Admin, Operador, and Executor accounts, then bootstraps any missing accounts without replacing existing passwords. This file is excluded from the Docker build context and Git. Users created by an Admin receive a generated initial password, shown only in the creation response, and can use it with their email to log in immediately.
+
+The email migration assigns those three addresses to the standard accounts. Other pre-existing accounts receive a temporary, non-deliverable address in the `legacy.invalid` domain; an Admin must replace it with the user's real email in User management before that user can sign in by email.

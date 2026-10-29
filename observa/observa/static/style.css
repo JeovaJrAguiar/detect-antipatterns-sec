@@ -169,3 +169,42 @@ input.form-control {
     max-width: 100%;
     overflow-x: auto;
 }
+
+.account-menu-icon {
+    width: 18px;
+    height: 18px;
+    margin-right: 0.25rem;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    vertical-align: text-bottom;
+}
+
+.account-menu {
+    min-width: 220px;
+}
+
+.password-requirements li {
+    color: #6c757d;
+    font-size: 0.9rem;
+}
+
+.password-requirements li span {
+    display: inline-block;
+    width: 1.5rem;
+    font-weight: 700;
+}
+
+.password-requirements li.is-valid {
+    color: #198754;
+}
+
+.password-requirements li.is-invalid {
+    color: #dc3545;
+}
+
+.table input.form-control {
+    margin-bottom: 0;
+}

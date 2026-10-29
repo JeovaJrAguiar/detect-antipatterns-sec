@@ -2,18 +2,24 @@ import os
 
 from sqlalchemy import select
 
-from observa.auth.security import hash_password
+from observa.auth.security import hash_password, normalize_email
 from observa.database.database import SessionLocal
 from observa.database.models import UserModel
 
 
 def main() -> None:
     username = os.getenv("BOOTSTRAP_ADMIN_USERNAME", "").strip().lower()
+    raw_email = os.getenv("BOOTSTRAP_ADMIN_EMAIL", "")
     password = os.getenv("BOOTSTRAP_ADMIN_PASSWORD", "")
-    if not username or not password:
+    if not username or not raw_email or not password:
         raise SystemExit(
-            "Set BOOTSTRAP_ADMIN_USERNAME and BOOTSTRAP_ADMIN_PASSWORD explicitly"
+            "Set BOOTSTRAP_ADMIN_USERNAME, BOOTSTRAP_ADMIN_EMAIL, "
+            "and BOOTSTRAP_ADMIN_PASSWORD explicitly"
         )
+    try:
+        email = normalize_email(raw_email)
+    except ValueError as error:
+        raise SystemExit("BOOTSTRAP_ADMIN_EMAIL must be a valid email address") from error
     if len(password) < 12:
         raise SystemExit("The bootstrap admin password must contain at least 12 characters")
 
@@ -30,6 +36,7 @@ def main() -> None:
         session.add(
             UserModel(
                 username=username,
+                email=email,
                 password_hash=hash_password(password),
                 role="admin",
                 is_active=True,
