@@ -21,7 +21,8 @@
 
       <h3 class="mb-3">Observa - Login</h3>
 
-      <input id="login-username" type="text" class="form-control mb-2" placeholder="Username">
+      <input id="login-email" type="email" class="form-control mb-2" placeholder="Email"
+        autocomplete="email">
       <div class="input-group login-password-group">
         <input id="login-password" type="password" class="form-control" placeholder="Password">
         <button id="toggle-password-visibility" class="btn btn-outline-secondary" type="button"
@@ -48,7 +49,24 @@
           <img src="/static/atlab.png" alt="Logo" class="header-logo">
         </a>
         <h2 class="text-center" style="margin-left:-40px;">Observa - Framework</h2>
-        <button id="logout-btn" class="btn btn-outline-secondary btn-sm">Logout</button>
+        <div class="dropdown">
+          <button id="account-menu-toggle" class="btn btn-outline-secondary dropdown-toggle" type="button"
+            data-bs-toggle="dropdown" aria-expanded="false">
+            <svg class="account-menu-icon" aria-hidden="true" viewBox="0 0 24 24">
+              <circle cx="12" cy="8" r="4"></circle>
+              <path d="M4 21a8 8 0 0 1 16 0"></path>
+            </svg>
+            <span id="current-username"></span>
+          </button>
+          <div class="dropdown-menu dropdown-menu-end account-menu">
+            <div class="px-3 py-2">
+              <div id="account-username" class="fw-semibold"></div>
+              <div id="account-role" class="text-muted small"></div>
+            </div>
+            <hr class="dropdown-divider">
+            <button id="logout-btn" class="btn btn-danger btn-sm w-100" type="button">Logout</button>
+          </div>
+        </div>
       </div>
 
       <!-- NAV TABS -->
@@ -262,11 +280,15 @@ if __name__ == "__main__":
             <div class="card-body">
               <h4 class="card-title mb-3">User management</h4>
               <div class="row g-2 align-items-end mb-4">
-                <div class="col-md-6">
+                <div class="col-md-4">
                   <label for="new-user-name" class="form-label">Username</label>
                   <input id="new-user-name" class="form-control" autocomplete="off">
                 </div>
                 <div class="col-md-4">
+                  <label for="new-user-email" class="form-label">Email</label>
+                  <input id="new-user-email" type="email" class="form-control" autocomplete="off">
+                </div>
+                <div class="col-md-2">
                   <label for="new-user-role" class="form-label">Role</label>
                   <select id="new-user-role" class="form-select">
                     <option value="operator">Operador</option>
@@ -281,7 +303,7 @@ if __name__ == "__main__":
               <div class="table-responsive">
                 <table class="table align-middle">
                   <thead>
-                    <tr><th>Username</th><th>Role</th><th>Active</th><th>Actions</th></tr>
+                    <tr><th>Username</th><th>Email</th><th>Role</th><th>Active</th><th>Actions</th></tr>
                   </thead>
                   <tbody id="user-list"></tbody>
                 </table>
@@ -373,7 +395,38 @@ if __name__ == "__main__":
     </div>
   </div> <!-- fecha app-content -->
 
-  <script src="/static/main.js?v=2"></script>
+  <div id="password-reset-modal" class="modal fade" tabindex="-1" aria-labelledby="password-reset-title"
+    aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 id="password-reset-title" class="modal-title">Change user password</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <label for="reset-user-password" class="form-label">New password</label>
+          <input id="reset-user-password" type="password" class="form-control" autocomplete="new-password">
+          <ul id="password-requirements" class="password-requirements list-unstyled mt-2 mb-3">
+            <li data-password-rule="length"><span aria-hidden="true"></span>At least 9 characters</li>
+            <li data-password-rule="uppercase"><span aria-hidden="true"></span>At least one uppercase letter</li>
+            <li data-password-rule="lowercase"><span aria-hidden="true"></span>At least one lowercase letter</li>
+            <li data-password-rule="number"><span aria-hidden="true"></span>At least one number</li>
+            <li data-password-rule="special"><span aria-hidden="true"></span>At least one special character</li>
+          </ul>
+          <label for="confirm-reset-user-password" class="form-label">Confirm new password</label>
+          <input id="confirm-reset-user-password" type="password" class="form-control"
+            autocomplete="new-password">
+          <div id="password-confirmation-message" class="small mt-2" aria-live="polite"></div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button id="save-user-password-btn" type="button" class="btn btn-primary" disabled>Save password</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="/static/main.js?v=4"></script>
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 
 </body>

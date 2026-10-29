@@ -67,7 +67,7 @@ def test_failed_login_is_audited_without_recording_password(monkeypatch):
 
     with pytest.raises(HTTPException) as error:
         _endpoint(clear.router, "/login")(
-            LoginRequest(username="unknown", password="do-not-store-this"),
+            LoginRequest(email="unknown@example.com", password="do-not-store-this"),
             _request(),
         )
 
@@ -83,6 +83,7 @@ def test_successful_login_is_audited_with_user_id(monkeypatch):
     user = SimpleNamespace(
         id=41,
         username="admin",
+        email="admin@observa.com",
         role="admin",
         is_active=True,
         password_hash="hashed-password",
@@ -114,7 +115,7 @@ def test_successful_login_is_audited_with_user_id(monkeypatch):
     monkeypatch.setattr(audit, "record_security_event", record)
 
     response = _endpoint(clear.router, "/login")(
-        LoginRequest(username="admin", password="correct-secret"), _request()
+        LoginRequest(email="admin@observa.com", password="do-not-store-this"), _request()
     )
 
     assert response["token"] == "signed-token"
@@ -196,16 +197,18 @@ def test_user_creation_and_deletion_keep_audit_rows_after_account_removal(monkey
     monkeypatch.setattr(user_endpoints, "hash_password", lambda password: "hashed")
 
     response = _endpoint(user_endpoints.router, "/users")(
-        UserCreateRequest(username="new-operator", role="operator"),
+        UserCreateRequest(
+            username="new-operator",
+            email="new-operator@example.com",
+            role="operator",
+        ),
         _request(),
         USER,
     )
-    created_user_id = response["user"]["username"]
+    created_user_id = response["user"]["id"]
 
     with session_factory() as session:
-        created_user = session.scalar(
-            select(UserModel).where(UserModel.username == created_user_id)
-        )
+        created_user = session.get(UserModel, created_user_id)
         assert created_user is not None
         audit_rows = session.scalars(select(SecurityAuditLogModel)).all()
         assert [(row.action, row.actor_user_id) for row in audit_rows] == [
@@ -216,8 +219,8 @@ def test_user_creation_and_deletion_keep_audit_rows_after_account_removal(monkey
         assert audit_rows[0].request_id == REQUEST_ID
         user_database_id = created_user.id
 
-    _endpoint(user_endpoints.router, "/users/{username}", method="DELETE")(
-        "new-operator", _request(), USER
+    _endpoint(user_endpoints.router, "/users/{user_id}", method="DELETE")(
+        user_database_id, _request(), USER
     )
 
     with session_factory() as session:

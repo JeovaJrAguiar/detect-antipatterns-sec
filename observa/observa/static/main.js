@@ -5,10 +5,14 @@ document.addEventListener("DOMContentLoaded", () => {
   const loginScreen = document.getElementById("login-screen");
   const appContent = document.getElementById("app-content");
   const loginBtn = document.getElementById("login-btn");
-  const loginUser = document.getElementById("login-username");
+  const loginEmail = document.getElementById("login-email");
   const loginPass = document.getElementById("login-password");
   const passwordVisibilityBtn = document.getElementById("toggle-password-visibility");
   const passwordVisibilityLabel = passwordVisibilityBtn.querySelector(".visually-hidden");
+  const currentUsernameLabel = document.getElementById("current-username");
+  const accountUsernameLabel = document.getElementById("account-username");
+  const accountRoleLabel = document.getElementById("account-role");
+  let currentUser = null;
 
   passwordVisibilityBtn.addEventListener("click", () => {
     const isPasswordVisible = loginPass.type === "text";
@@ -67,6 +71,10 @@ document.addEventListener("DOMContentLoaded", () => {
   function clearSession() {
     localStorage.removeItem("auth_token");
     localStorage.removeItem("auth_role");
+    currentUser = null;
+    currentUsernameLabel.textContent = "";
+    accountUsernameLabel.textContent = "";
+    accountRoleLabel.textContent = "";
   }
 
   async function apiFetch(url, options = {}) {
@@ -94,7 +102,20 @@ document.addEventListener("DOMContentLoaded", () => {
     document.getElementById("tab-history").hidden = isExecutor;
   }
 
+  function updateAccountMenu(user) {
+    const roleLabels = {
+      admin: "Admin",
+      operator: "Operador",
+      executor: "Executor"
+    };
+    currentUser = { id: user.id, username: user.username, role: user.role };
+    currentUsernameLabel.textContent = user.username;
+    accountUsernameLabel.textContent = user.username;
+    accountRoleLabel.textContent = roleLabels[user.role] || user.role;
+  }
+
   async function activateUser(user) {
+    updateAccountMenu(user);
     localStorage.setItem("auth_role", user.role);
     applyRole(user.role);
     showApp();
@@ -123,7 +144,7 @@ document.addEventListener("DOMContentLoaded", () => {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        username: loginUser.value,
+        email: loginEmail.value,
         password: loginPass.value
       })
     });
@@ -133,7 +154,7 @@ document.addEventListener("DOMContentLoaded", () => {
       localStorage.setItem("auth_token", data.token);
       await activateUser(data);
     } else {
-      alert("Invalid username or password.");
+      alert("Invalid email or password.");
     }
   });
 
@@ -141,10 +162,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
   logoutBtn.addEventListener("click", () => {
     clearSession();
-    localStorage.removeItem("auth_role");
-    appContent.style.display = "none";
-    loginScreen.style.display = "flex"; // volta a tela
-    loginUser.value = "";
+    showLogin();
+    loginEmail.value = "";
     loginPass.value = "";
   });
 
@@ -155,8 +174,80 @@ document.addEventListener("DOMContentLoaded", () => {
   const detectorHistorySelect = document.getElementById("history-filter-detector");
   const userList = document.getElementById("user-list");
   const newUserName = document.getElementById("new-user-name");
+  const newUserEmail = document.getElementById("new-user-email");
   const newUserRole = document.getElementById("new-user-role");
   const createUserBtn = document.getElementById("create-user-btn");
+  newUserName.maxLength = 128;
+  const passwordResetModal = document.getElementById("password-reset-modal");
+  const resetPasswordInput = document.getElementById("reset-user-password");
+  const confirmResetPasswordInput = document.getElementById("confirm-reset-user-password");
+  const passwordConfirmationMessage = document.getElementById("password-confirmation-message");
+  const saveUserPasswordBtn = document.getElementById("save-user-password-btn");
+  let passwordResetUserId = null;
+
+  function updatePasswordRequirements() {
+    const password = resetPasswordInput.value;
+    const checks = {
+      length: Array.from(password).length >= 9,
+      uppercase: /[A-Z]/.test(password),
+      lowercase: /[a-z]/.test(password),
+      number: /[0-9]/.test(password),
+      special: /[^A-Za-z0-9\s]/.test(password)
+    };
+
+    Object.entries(checks).forEach(([rule, isValid]) => {
+      const item = passwordResetModal.querySelector(`[data-password-rule="${rule}"]`);
+      item.classList.toggle("is-valid", password.length > 0 && isValid);
+      item.classList.toggle("is-invalid", password.length > 0 && !isValid);
+      item.querySelector("span").textContent = isValid ? "✓" : "○";
+    });
+
+    const confirmationMatches = password.length > 0
+      && password === confirmResetPasswordInput.value;
+    passwordConfirmationMessage.textContent = confirmResetPasswordInput.value
+      ? confirmationMatches ? "Passwords match." : "Passwords do not match."
+      : "";
+    passwordConfirmationMessage.className = confirmationMatches
+      ? "small mt-2 text-success"
+      : "small mt-2 text-danger";
+    saveUserPasswordBtn.disabled = !Object.values(checks).every(Boolean) || !confirmationMatches;
+  }
+
+  [resetPasswordInput, confirmResetPasswordInput].forEach(input => {
+    input.addEventListener("input", updatePasswordRequirements);
+  });
+
+  passwordResetModal.addEventListener("hidden.bs.modal", () => {
+    passwordResetUserId = null;
+    resetPasswordInput.value = "";
+    confirmResetPasswordInput.value = "";
+    passwordConfirmationMessage.textContent = "";
+    passwordConfirmationMessage.className = "small mt-2";
+    updatePasswordRequirements();
+  });
+
+  saveUserPasswordBtn.addEventListener("click", async () => {
+    if (!passwordResetUserId || saveUserPasswordBtn.disabled) return;
+
+    saveUserPasswordBtn.disabled = true;
+    const response = await apiFetch(
+      `/api/v1/admin/users/${passwordResetUserId}/password`,
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password: resetPasswordInput.value })
+      }
+    );
+    const data = await response.json();
+    if (!response.ok) {
+      alert(data.detail || "Unable to update user password.");
+      updatePasswordRequirements();
+      return;
+    }
+
+    bootstrap.Modal.getOrCreateInstance(passwordResetModal).hide();
+    alert("Password updated successfully.");
+  });
 
   // Campos do form de adicionar Source
   const addSourceBtn = document.getElementById("add-source-btn");
@@ -329,7 +420,22 @@ document.addEventListener("DOMContentLoaded", () => {
     data.users.forEach(user => {
       const row = document.createElement("tr");
       const usernameCell = document.createElement("td");
-      usernameCell.textContent = user.username;
+      const usernameInput = document.createElement("input");
+      usernameInput.type = "text";
+      usernameInput.className = "form-control form-control-sm";
+      usernameInput.value = user.username;
+      usernameInput.maxLength = 128;
+      usernameInput.autocomplete = "off";
+      usernameCell.appendChild(usernameInput);
+
+      const emailCell = document.createElement("td");
+      const emailInput = document.createElement("input");
+      emailInput.type = "email";
+      emailInput.className = "form-control form-control-sm";
+      emailInput.value = user.email;
+      emailInput.maxLength = 254;
+      emailInput.autocomplete = "off";
+      emailCell.appendChild(emailInput);
 
       const roleCell = document.createElement("td");
       const roleSelect = document.createElement("select");
@@ -357,17 +463,46 @@ document.addEventListener("DOMContentLoaded", () => {
       saveButton.className = "btn btn-sm btn-outline-primary me-2";
       saveButton.textContent = "Save";
       saveButton.addEventListener("click", async () => {
-        const result = await apiFetch(`/api/v1/admin/users/${encodeURIComponent(user.username)}`, {
+        const updatedUsername = usernameInput.value.trim();
+        const updatedEmail = emailInput.value.trim().toLowerCase();
+        const result = await apiFetch(`/api/v1/admin/users/${user.id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ role: roleSelect.value, is_active: activeCheckbox.checked })
+          body: JSON.stringify({
+            username: updatedUsername,
+            email: updatedEmail,
+            role: roleSelect.value,
+            is_active: activeCheckbox.checked
+          })
         });
         if (!result.ok) {
           const error = await result.json();
           alert(error.detail || "Unable to update user.");
           return;
         }
+
+        if (currentUser?.id === user.id) {
+          updateAccountMenu({
+            id: currentUser.id,
+            username: updatedUsername,
+            role: currentUser.role
+          });
+        }
         await loadUsers();
+      });
+
+      const resetPasswordButton = document.createElement("button");
+      resetPasswordButton.type = "button";
+      resetPasswordButton.className = "btn btn-sm btn-outline-secondary me-2";
+      resetPasswordButton.textContent = "Change password";
+      resetPasswordButton.addEventListener("click", () => {
+        passwordResetUserId = user.id;
+        document.getElementById("password-reset-title").textContent =
+          `Change password for ${user.username}`;
+        resetPasswordInput.value = "";
+        confirmResetPasswordInput.value = "";
+        updatePasswordRequirements();
+        bootstrap.Modal.getOrCreateInstance(passwordResetModal).show();
       });
 
       const deleteButton = document.createElement("button");
@@ -376,7 +511,7 @@ document.addEventListener("DOMContentLoaded", () => {
       deleteButton.textContent = "Delete";
       deleteButton.addEventListener("click", async () => {
         if (!confirm(`Delete user '${user.username}'?`)) return;
-        const result = await apiFetch(`/api/v1/admin/users/${encodeURIComponent(user.username)}`, {
+        const result = await apiFetch(`/api/v1/admin/users/${user.id}`, {
           method: "DELETE"
         });
         if (!result.ok) {
@@ -387,23 +522,24 @@ document.addEventListener("DOMContentLoaded", () => {
         await loadUsers();
       });
 
-      actionsCell.append(saveButton, deleteButton);
-      row.append(usernameCell, roleCell, activeCell, actionsCell);
+      actionsCell.append(saveButton, resetPasswordButton, deleteButton);
+      row.append(usernameCell, emailCell, roleCell, activeCell, actionsCell);
       userList.appendChild(row);
     });
   }
 
   createUserBtn.addEventListener("click", async () => {
     const username = newUserName.value.trim();
-    if (!username) {
-      alert("Enter a username.");
+    const email = newUserEmail.value.trim().toLowerCase();
+    if (!username || !email) {
+      alert("Enter a username and email address.");
       return;
     }
 
     const response = await apiFetch("/api/v1/admin/users", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username, role: newUserRole.value })
+      body: JSON.stringify({ username, email, role: newUserRole.value })
     });
     const data = await response.json();
     if (!response.ok) {
@@ -413,6 +549,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     alert(`User: ${data.user.username}\nRole: ${data.user.role}\nInitial password: ${data.initial_password}\n\nSave this password now. It will not be shown again.`);
     newUserName.value = "";
+    newUserEmail.value = "";
     await loadUsers();
   });
 

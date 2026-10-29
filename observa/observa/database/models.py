@@ -1,4 +1,4 @@
-from sqlalchemy import Boolean, CheckConstraint, Column, DateTime, Double, ForeignKey, Index, Integer, String, event
+from sqlalchemy import Boolean, CheckConstraint, Column, DateTime, Double, ForeignKey, Index, Integer, String, UniqueConstraint, event
 from sqlalchemy.schema import DDL
 from observa.database.database import Base
 from sqlalchemy.dialects.postgresql import JSONB 
@@ -12,10 +12,12 @@ class UserModel(Base):
             "role IN ('admin', 'operator', 'executor')",
             name="ck_users_role",
         ),
+        UniqueConstraint("email", name="uq_users_email"),
     )
 
     id = Column(Integer, primary_key=True, index=True)
-    username = Column(String(64), unique=True, nullable=False)
+    username = Column(String(128), nullable=False)
+    email = Column(String(254), nullable=False)
     password_hash = Column(String(255), nullable=False)
     role = Column(String(16), nullable=False)
     is_active = Column(Boolean, nullable=False, default=True, server_default="true")

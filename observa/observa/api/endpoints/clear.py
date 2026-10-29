@@ -1,11 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import text
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 from observa.database.database import engine
 from observa.database.repositories import DetectorRepository, SourceRepository
 from observa.database.database import SessionLocal
 from observa.database.models import UserModel
-from observa.auth.security import create_access_token, verify_password
+from observa.auth.security import create_access_token, normalize_email, verify_password
 from observa.auth.dependencies import AuthenticatedUser, require_roles
 from observa.security import audit
 from typing import List
@@ -16,8 +16,13 @@ class DeleteRequest(BaseModel):
 
 
 class LoginRequest(BaseModel):
-    username: str
+    email: str = Field(min_length=6, max_length=254)
     password: str
+
+    @field_validator("email")
+    @classmethod
+    def normalize_email(cls, email: str) -> str:
+        return normalize_email(email)
         
 @router.delete("/clear")
 def clear_database(
@@ -75,23 +80,22 @@ def delete_detectors(
 
 @router.post("/login")
 def login(data: LoginRequest, request: Request):
-    username = data.username.strip().lower()
+    email = data.email.strip().lower()
     with SessionLocal() as session:
-        user = session.query(UserModel).filter(UserModel.username == username).first()
+        user = session.query(UserModel).filter(UserModel.email == email).first()
         if user is None or not user.is_active or not verify_password(data.password, user.password_hash):
             audit.record_security_event(
                 action="auth.login",
                 outcome="failure",
                 actor_user_id=None,
                 resource_type="user",
-                resource_id=username,
                 request=request,
                 session=session,
             )
             session.commit()
-            raise HTTPException(status_code=401, detail="Invalid username or password")
+            raise HTTPException(status_code=401, detail="Invalid email or password")
 
-        token = create_access_token(username=user.username, role=user.role)
+        token = create_access_token(user_id=user.id, username=user.username, role=user.role)
         audit.record_security_event(
             action="auth.login",
             outcome="success",
@@ -107,6 +111,8 @@ def login(data: LoginRequest, request: Request):
             "token": token,
             "token_type": "bearer",
             "expires_in": 900,
+            "id": user.id,
             "username": user.username,
+            "email": user.email,
             "role": user.role,
         }

@@ -5,6 +5,7 @@ import jwt
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import select
+from sqlalchemy import select
 
 from observa.auth.security import decode_access_token
 from observa.database.database import SessionLocal
@@ -38,12 +39,22 @@ def get_authenticated_user(
     except (jwt.InvalidTokenError, TypeError, ValueError):
         raise unauthorized
 
-    username = claims.get("sub")
-    if not isinstance(username, str) or not username:
-        raise unauthorized
-
+    user_id = claims.get("uid")
     with SessionLocal() as session:
-        user = session.scalar(select(UserModel).where(UserModel.username == username))
+        if "uid" in claims:
+            if not isinstance(user_id, int) or isinstance(user_id, bool):
+                raise unauthorized
+            user = session.get(UserModel, user_id)
+        else:
+            username = claims.get("sub")
+            if not isinstance(username, str) or not username:
+                raise unauthorized
+            matches = session.scalars(
+                select(UserModel).where(UserModel.username == username)
+            ).all()
+            if len(matches) != 1:
+                raise unauthorized
+            user = matches[0]
         if user is None or not user.is_active or user.role not in VALID_ROLES:
             raise unauthorized
         principal = AuthenticatedUser(

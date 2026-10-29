@@ -156,9 +156,9 @@ printf '\n%s\n' \
   "Documentacao da API: ${BASE_URL}/docs." \
   "PostgreSQL: localhost:5432, banco antipatterns." \
   "" \
-  "Perfil Admin: usuario admin, senha local ${DEV_ADMIN_PASSWORD}." \
-  "Perfil Operador: usuario operador, senha local ${DEV_OPERATOR_PASSWORD}." \
-  "Perfil Executor: usuario executor, senha local ${DEV_EXECUTOR_PASSWORD}." \
+  "Perfil Admin: usuario admin, email admin@observa.com, senha local ${DEV_ADMIN_PASSWORD}." \
+  "Perfil Operador: usuario operador, email operador@observa.com, senha local ${DEV_OPERATOR_PASSWORD}." \
+  "Perfil Executor: usuario executor, email executor@observa.com, senha local ${DEV_EXECUTOR_PASSWORD}." \
   "Banco de desenvolvimento: usuario postgres, senha postgres (credencial do Compose local)." \
   "ATENCAO: credenciais de desenvolvimento; nao exponha esta stack em rede ou producao." \
   "" \
