@@ -7,6 +7,17 @@ document.addEventListener("DOMContentLoaded", () => {
   const loginBtn = document.getElementById("login-btn");
   const loginUser = document.getElementById("login-username");
   const loginPass = document.getElementById("login-password");
+  const passwordVisibilityBtn = document.getElementById("toggle-password-visibility");
+  const passwordVisibilityLabel = passwordVisibilityBtn.querySelector(".visually-hidden");
+
+  passwordVisibilityBtn.addEventListener("click", () => {
+    const isPasswordVisible = loginPass.type === "text";
+    loginPass.type = isPasswordVisible ? "password" : "text";
+    passwordVisibilityBtn.setAttribute("aria-pressed", String(!isPasswordVisible));
+    const label = isPasswordVisible ? "Mostrar senha" : "Ocultar senha";
+    passwordVisibilityBtn.setAttribute("aria-label", label);
+    passwordVisibilityLabel.textContent = label;
+  });
 
   let detectors = []; // isso deve ser preenchido da mesma forma que o select atual
 
@@ -875,4 +886,3 @@ ${(() => {
     });
   }
 });
-

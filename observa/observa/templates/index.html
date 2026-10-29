@@ -22,7 +22,18 @@
       <h3 class="mb-3">Observa - Login</h3>
 
       <input id="login-username" type="text" class="form-control mb-2" placeholder="Username">
-      <input id="login-password" type="password" class="form-control mb-3" placeholder="Password">
+      <div class="input-group login-password-group">
+        <input id="login-password" type="password" class="form-control" placeholder="Password">
+        <button id="toggle-password-visibility" class="btn btn-outline-secondary" type="button"
+          aria-label="Mostrar senha" aria-controls="login-password" aria-pressed="false">
+          <svg class="password-visibility-icon" aria-hidden="true" viewBox="0 0 24 24">
+            <path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7z"></path>
+            <circle cx="12" cy="12" r="3"></circle>
+            <path class="password-visibility-slash" d="M3 3l18 18"></path>
+          </svg>
+          <span class="visually-hidden">Mostrar senha</span>
+        </button>
+      </div>
 
       <button id="login-btn" class="btn btn-primary w-100">Login</button>
     </div>
@@ -362,7 +373,7 @@ if __name__ == "__main__":
     </div>
   </div> <!-- fecha app-content -->
 
-  <script src="/static/main.js"></script>
+  <script src="/static/main.js?v=2"></script>
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 
 </body>

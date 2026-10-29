@@ -103,6 +103,46 @@ input.form-control {
     max-width: 360px;
 }
 
+.login-password-group input.form-control {
+    margin-bottom: 0;
+}
+
+.login-password-group {
+    margin-bottom: 1rem;
+}
+
+.login-box > .form-control,
+.login-password-group .form-control,
+#toggle-password-visibility {
+    height: calc(1.5em + 0.75rem + 2px);
+}
+
+#toggle-password-visibility {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 calc(1.5em + 0.75rem + 2px);
+    padding: 0;
+}
+
+.password-visibility-icon {
+    width: 20px;
+    height: 20px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.password-visibility-slash {
+    display: none;
+}
+
+#toggle-password-visibility[aria-pressed="false"] .password-visibility-slash {
+    display: block;
+}
+
 /* Logo adjustments */
 .login-logo {
     width: 55%;
